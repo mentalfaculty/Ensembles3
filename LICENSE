@@ -1,0 +1,52 @@
+Ensembles 3 — Commercial License
+
+Copyright (c) 2026 Mental Faculty B.V. All rights reserved.
+
+This software is distributed as compiled binary frameworks. The source code is
+not included and is not open source.
+
+FREE BACKENDS
+
+The following frameworks may be used free of charge in any application,
+including commercial applications, without a license key:
+
+  - Ensembles (core framework)
+  - EnsemblesCloudKit
+  - EnsemblesLocalFile
+  - EnsemblesMemory
+  - EnsemblesSwiftData
+
+These frameworks are provided "as is", without warranty of any kind, express or
+implied.
+
+PAID BACKENDS
+
+The following frameworks require a valid subscription license purchased from
+Mental Faculty (https://mentalfaculty.com):
+
+  - EnsemblesGoogleDrive
+  - EnsemblesOneDrive
+  - EnsemblesPCloud
+  - EnsemblesWebDAV
+  - EnsemblesEncrypted
+
+Use of paid backends without a valid license is not permitted. Each license key
+is issued to a single developer or team and may be used in any number of
+applications owned by the licensee.
+
+RESTRICTIONS
+
+You may not:
+  - Reverse engineer, decompile, or disassemble the binary frameworks
+  - Redistribute the frameworks outside of your own applications
+  - Share, publish, or sublicense your license key
+  - Remove or circumvent the license validation mechanism
+
+DISCLAIMER
+
+THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL MENTAL
+FACULTY B.V. BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
