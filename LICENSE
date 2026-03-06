@@ -1,52 +1,283 @@
-Ensembles 3 — Commercial License
+Ensembles 3 — Commercial Source License
 
-Copyright (c) 2026 Mental Faculty B.V. All rights reserved.
+Copyright (c) 2026 The Mental Faculty B.V. All rights reserved.
 
-This software is distributed as compiled binary frameworks. The source code is
-not included and is not open source.
+This is a commercial license agreement ("Agreement") between The Mental Faculty
+B.V., a company organized under the laws of the Netherlands ("Licensor"), and
+the individual or entity accessing or using this software ("Licensee"). By
+downloading, accessing, copying, or using any portion of this software or its
+accompanying documentation (collectively, the "Software"), Licensee agrees to be
+bound by the terms of this Agreement. If Licensee does not agree, Licensee must
+not access or use the Software.
 
-FREE BACKENDS
 
-The following frameworks may be used free of charge in any application,
-including commercial applications, without a license key:
+1. DEFINITIONS
 
-  - Ensembles (core framework)
-  - EnsemblesCloudKit
-  - EnsemblesLocalFile
-  - EnsemblesMemory
-  - EnsemblesSwiftData
+"Software" means the Ensembles 3 source code, compiled binaries (including
+XCFrameworks), documentation, and any updates or modifications provided by
+Licensor.
 
-These frameworks are provided "as is", without warranty of any kind, express or
-implied.
+"Free Components" means the following modules, which may be used without a
+license key: Ensembles (core framework), EnsemblesCloudKit, EnsemblesLocalFile,
+EnsemblesMemory, and EnsemblesSwiftData.
 
-PAID BACKENDS
+"Paid Components" means all modules not listed as Free Components, including but
+not limited to: EnsemblesGoogleDrive, EnsemblesOneDrive, EnsemblesPCloud,
+EnsemblesWebDAV, EnsemblesEncrypted, EnsemblesDropbox, EnsemblesS3,
+EnsemblesBox, EnsemblesZip, and EnsemblesMultipeer, as well as any additional
+modules designated as paid by Licensor.
 
-The following frameworks require a valid subscription license purchased from
-Mental Faculty (https://mentalfaculty.com):
+"Subscription" means a valid, active license purchased from Licensor through
+https://ensembles.io or an authorized channel.
 
-  - EnsemblesGoogleDrive
-  - EnsemblesOneDrive
-  - EnsemblesPCloud
-  - EnsemblesWebDAV
-  - EnsemblesEncrypted
+"Licensee Application" means a software application developed by or for Licensee
+that incorporates the Software and is not itself a synchronization framework,
+library, toolkit, or middleware intended for use by other developers.
 
-Use of paid backends without a valid license is not permitted. Each license key
-is issued to a single developer or team and may be used in any number of
-applications owned by the licensee.
+"Competing Product" means any software library, framework, SDK, toolkit,
+middleware, or development component — whether distributed commercially, as open
+source, or otherwise — that provides data synchronization, data replication, or
+event-sourcing functionality for persistent storage frameworks (including but not
+limited to Core Data, SwiftData, or their equivalents), or that is substantially
+similar in purpose or functionality to the Software.
 
-RESTRICTIONS
 
-You may not:
-  - Reverse engineer, decompile, or disassemble the binary frameworks
-  - Redistribute the frameworks outside of your own applications
-  - Share, publish, or sublicense your license key
-  - Remove or circumvent the license validation mechanism
+2. GRANT OF LICENSE
 
-DISCLAIMER
+Subject to the terms of this Agreement, Licensor grants Licensee a limited,
+non-exclusive, non-transferable, non-sublicensable, revocable license to:
 
-THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL MENTAL
-FACULTY B.V. BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+(a) Use, compile, and modify the Software solely for the purpose of developing,
+testing, and distributing Licensee Applications.
+
+(b) Include compiled (binary) forms of the Software within Licensee Applications
+that Licensee distributes to end users.
+
+(c) Use the Software for personal study, reference, and internal evaluation.
+
+This license does not convey any ownership interest in the Software. All rights
+not expressly granted are reserved by Licensor.
+
+
+3. FREE AND PAID COMPONENTS
+
+3.1. Free Components may be used in any Licensee Application, including
+commercial applications, without a Subscription and without a license key.
+
+3.2. Paid Components require an active Subscription. Use of any Paid Component
+without a valid Subscription constitutes a material breach of this Agreement.
+
+3.3. Licensor reserves the right to reclassify modules between Free and Paid
+Components in future releases. Any such reclassification applies only to
+versions released after the reclassification and does not affect versions already
+licensed to Licensee.
+
+
+4. SUBSCRIPTION TERMS
+
+4.1. A Subscription entitles Licensee to use any version of the Software
+(including Paid Components) that is released during or before the active
+Subscription period.
+
+4.2. Upon expiration or termination of a Subscription:
+
+(a) Licensee may continue to use, compile, and distribute any version of the
+Software that was released on or before the Subscription expiry date, in
+perpetuity, subject to all other terms of this Agreement.
+
+(b) Licensee is not entitled to use Paid Components from any version of the
+Software released after the Subscription expiry date in Licensee Applications.
+
+(c) Licensee Applications already distributed to end users may continue to
+operate without interruption.
+
+4.3. Each license key is issued to a single developer or a single development
+team within one organization. A license key may be used in any number of
+Licensee Applications owned by that developer or organization. License keys must
+not be shared with, transferred to, or used by any individual or entity not
+covered by the original issuance.
+
+4.4. Subscriptions are managed via the license portal at
+https://ensembles.io/portal.
+
+
+5. RESTRICTIONS
+
+Licensee shall not, and shall not permit any third party to:
+
+5.1. REDISTRIBUTION — Redistribute, publish, share, transmit, make available, or
+otherwise disclose the source code of the Software, in whole or in part, in any
+form, including but not limited to: public or private repositories, package
+managers, archives, file-sharing services, forums, blog posts, documentation
+sites, or any electronic or physical medium.
+
+5.2. RESALE AND TRANSFER — Sell, resell, lease, rent, sublicense, assign, or
+otherwise transfer the Software (in source or binary form), this license, or any
+rights granted hereunder to any third party, whether for compensation or
+otherwise.
+
+5.3. COMPETING PRODUCTS — Use the Software, in whole or in part, directly or
+indirectly, to develop, create, contribute to, or assist in the creation of a
+Competing Product, whether by manual development, automated tooling, code
+generation, reverse engineering, or any other means.
+
+5.4. AI-ASSISTED CLONING — Use the Software as training data, input, context,
+reference material, or prompt content for any artificial intelligence system,
+machine learning model, large language model, code generation tool, or automated
+system for the purpose of generating, producing, or deriving a Competing Product
+or any component thereof. For the avoidance of doubt: Licensee may use
+AI-assisted coding tools (such as code completion, code review, or
+conversational coding assistants) where the Software is part of the tool's
+context, provided such use is solely for the purpose of developing Licensee
+Applications and not for creating a Competing Product.
+
+5.5. LICENSE KEY ABUSE — Share, publish, distribute, sublicense, sell, or make
+available any license key issued under this Agreement to any person or entity not
+authorized under the original issuance.
+
+5.6. CIRCUMVENTION — Remove, disable, bypass, circumvent, or interfere with the
+license validation mechanism, license key verification, or any other technical
+protection measure incorporated in the Software.
+
+5.7. DECOMPILATION — Reverse engineer, decompile, or disassemble any compiled
+binary forms of the Software, except to the limited extent that applicable law
+expressly prohibits this restriction notwithstanding a contractual provision to
+the contrary.
+
+
+6. INTELLECTUAL PROPERTY
+
+6.1. The Software, including all source code, compiled binaries, documentation,
+architecture, algorithms, and design, is and remains the exclusive property of
+Licensor. This Agreement does not transfer any intellectual property rights to
+Licensee.
+
+6.2. Modifications made by Licensee to the Software for use in Licensee
+Applications do not grant Licensee any ownership of the underlying Software or
+its derivatives.
+
+6.3. Licensee acknowledges that unauthorized use, disclosure, or distribution of
+the Software may cause irreparable harm to Licensor for which monetary damages
+would be inadequate, and that Licensor shall be entitled to seek injunctive or
+equitable relief in addition to any other remedies available at law.
+
+
+7. DISCLAIMER OF WARRANTIES
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY
+KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY. LICENSOR EXPRESSLY DISCLAIMS ALL
+WARRANTIES, INCLUDING BUT NOT LIMITED TO:
+
+(a) THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+AND NON-INFRINGEMENT;
+
+(b) ANY WARRANTY THAT THE SOFTWARE WILL BE UNINTERRUPTED, ERROR-FREE, SECURE,
+OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS;
+
+(c) ANY WARRANTY REGARDING THE ACCURACY, RELIABILITY, COMPLETENESS, OR
+TIMELINESS OF ANY DATA SYNCHRONIZED, TRANSMITTED, STORED, OR PROCESSED BY THE
+SOFTWARE;
+
+(d) ANY WARRANTY ARISING FROM COURSE OF DEALING, COURSE OF PERFORMANCE, OR
+USAGE OF TRADE.
+
+LICENSEE ASSUMES ALL RISK REGARDING THE QUALITY, PERFORMANCE, AND SUITABILITY
+OF THE SOFTWARE. NO ADVICE OR INFORMATION, WHETHER ORAL OR WRITTEN, OBTAINED
+FROM LICENSOR SHALL CREATE ANY WARRANTY NOT EXPRESSLY STATED IN THIS AGREEMENT.
+
+
+8. LIMITATION OF LIABILITY
+
+8.1. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+LICENSOR, ITS DIRECTORS, OFFICERS, EMPLOYEES, AGENTS, OR AFFILIATES BE LIABLE
+TO LICENSEE OR ANY THIRD PARTY FOR ANY OF THE FOLLOWING, WHETHER ARISING FROM
+CONTRACT, TORT (INCLUDING NEGLIGENCE), STRICT LIABILITY, OR ANY OTHER LEGAL
+THEORY, EVEN IF LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES:
+
+(a) ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY
+DAMAGES;
+
+(b) ANY LOSS OF DATA, CORRUPTION OF DATA, LOSS OF ACCURACY OR INTEGRITY OF
+DATA, OR FAILURE TO SYNCHRONIZE DATA CORRECTLY;
+
+(c) ANY LOSS OF PROFITS, REVENUE, BUSINESS, GOODWILL, ANTICIPATED SAVINGS, OR
+REPUTATION;
+
+(d) ANY DAMAGE TO OTHER SOFTWARE, SYSTEMS, OR SERVICES ARISING FROM THE USE OF
+OR INABILITY TO USE THE SOFTWARE;
+
+(e) ANY COST OF PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+
+(f) ANY BUSINESS INTERRUPTION, DOWNTIME, OR LOSS OF USE.
+
+8.2. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, LICENSOR'S TOTAL
+AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THIS AGREEMENT OR THE
+SOFTWARE, REGARDLESS OF THE CAUSE OF ACTION, SHALL NOT EXCEED THE LESSER OF:
+(I) THE TOTAL FEES ACTUALLY PAID BY LICENSEE TO LICENSOR IN THE TWELVE (12)
+MONTHS PRECEDING THE EVENT GIVING RISE TO THE CLAIM, OR (II) ONE HUNDRED EUROS
+(EUR 100).
+
+8.3. THE LIMITATIONS IN THIS SECTION SHALL APPLY EVEN IF ANY LIMITED REMEDY
+PROVIDED HEREIN FAILS OF ITS ESSENTIAL PURPOSE.
+
+8.4. LICENSEE ACKNOWLEDGES THAT THE SOFTWARE PERFORMS DATA SYNCHRONIZATION
+OPERATIONS THAT MAY MODIFY, OVERWRITE, OR DELETE DATA IN PERSISTENT STORES.
+LICENSEE IS SOLELY RESPONSIBLE FOR IMPLEMENTING ADEQUATE BACKUP, VALIDATION, AND
+DATA RECOVERY PROCEDURES. LICENSOR SHALL HAVE NO LIABILITY WHATSOEVER FOR ANY
+DATA LOSS, DATA CORRUPTION, OR UNINTENDED DATA MODIFICATION.
+
+
+9. INDEMNIFICATION
+
+Licensee shall indemnify, defend, and hold harmless Licensor and its directors,
+officers, employees, and agents from and against any and all claims, damages,
+losses, liabilities, costs, and expenses (including reasonable attorneys' fees)
+arising out of or relating to: (a) Licensee's use of the Software; (b) any
+Licensee Application; (c) Licensee's breach of this Agreement; or (d) any claim
+that a Licensee Application infringes the rights of a third party.
+
+
+10. TERMINATION
+
+10.1. This Agreement is effective until terminated. Licensor may terminate this
+Agreement immediately upon written notice if Licensee breaches any term hereof.
+
+10.2. Upon termination, Licensee must immediately cease all use of the Software
+and destroy all copies of the source code in Licensee's possession or control.
+Compiled Licensee Applications already distributed to end users prior to
+termination are not required to be recalled, but no further distribution is
+permitted.
+
+10.3. Sections 1, 5, 6, 7, 8, 9, and 11 shall survive termination of this
+Agreement.
+
+
+11. GENERAL PROVISIONS
+
+11.1. GOVERNING LAW — This Agreement shall be governed by and construed in
+accordance with the laws of the Netherlands, without regard to its conflict of
+laws principles.
+
+11.2. DISPUTE RESOLUTION — Any dispute arising out of or relating to this
+Agreement shall be submitted to the exclusive jurisdiction of the competent
+courts of Amsterdam, the Netherlands.
+
+11.3. SEVERABILITY — If any provision of this Agreement is held to be invalid or
+unenforceable, the remaining provisions shall continue in full force and effect,
+and the invalid provision shall be modified to the minimum extent necessary to
+make it valid and enforceable.
+
+11.4. ENTIRE AGREEMENT — This Agreement constitutes the entire agreement between
+the parties regarding the Software and supersedes all prior or contemporaneous
+agreements, understandings, or representations, whether written or oral.
+
+11.5. WAIVER — The failure of Licensor to enforce any right or provision of this
+Agreement shall not constitute a waiver of such right or provision.
+
+11.6. ASSIGNMENT — Licensee may not assign or transfer this Agreement or any
+rights hereunder without Licensor's prior written consent. Licensor may assign
+this Agreement without restriction.
+
+11.7. NOTICES — Any notices required or permitted under this Agreement shall be
+in writing and sent to the addresses provided at the time of purchase or to such
+other address as either party may designate in writing.
