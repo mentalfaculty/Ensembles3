@@ -1,0 +1,282 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4A1B2C3D4E5F00000000000E /* SimpleSyncSwiftDataApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F00000000000A /* SimpleSyncSwiftDataApp.swift */; };
+		4A1B2C3D4E5F00000000000F /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F00000000000B /* DeviceView.swift */; };
+		4A1B2C3D4E5F000000000010 /* NumberItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F00000000000C /* NumberItem.swift */; };
+		4A1B2C3D4E5F00000000001E /* SyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F00000000001F /* SyncController.swift */; };
+		4A1B2C3D4E5F000000000011 /* EnsemblesSwiftData in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1B2C3D4E5F00000000001B /* EnsemblesSwiftData */; };
+		4A1B2C3D4E5F000000000012 /* Ensembles in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1B2C3D4E5F00000000001C /* Ensembles */; };
+		4A1B2C3D4E5F000000000013 /* EnsemblesLocalFile in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1B2C3D4E5F00000000001D /* EnsemblesLocalFile */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4A1B2C3D4E5F00000000000A /* SimpleSyncSwiftDataApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleSyncSwiftDataApp.swift; sourceTree = "<group>"; };
+		4A1B2C3D4E5F00000000000B /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
+		4A1B2C3D4E5F00000000000C /* NumberItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberItem.swift; sourceTree = "<group>"; };
+		4A1B2C3D4E5F00000000000D /* SimpleSyncSwiftData.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleSyncSwiftData.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4A1B2C3D4E5F00000000001F /* SyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncController.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4A1B2C3D4E5F000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1B2C3D4E5F000000000011 /* EnsemblesSwiftData in Frameworks */,
+				4A1B2C3D4E5F000000000012 /* Ensembles in Frameworks */,
+				4A1B2C3D4E5F000000000013 /* EnsemblesLocalFile in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4A1B2C3D4E5F000000000006 = {
+			isa = PBXGroup;
+			children = (
+				4A1B2C3D4E5F000000000007 /* SimpleSyncSwiftData */,
+				4A1B2C3D4E5F000000000008 /* Products */,
+				4A1B2C3D4E5F000000000009 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		4A1B2C3D4E5F000000000007 /* SimpleSyncSwiftData */ = {
+			isa = PBXGroup;
+			children = (
+				4A1B2C3D4E5F00000000000A /* SimpleSyncSwiftDataApp.swift */,
+				4A1B2C3D4E5F00000000000B /* DeviceView.swift */,
+				4A1B2C3D4E5F00000000000C /* NumberItem.swift */,
+				4A1B2C3D4E5F00000000001F /* SyncController.swift */,
+			);
+			name = SimpleSyncSwiftData;
+			path = .;
+			sourceTree = "<group>";
+		};
+		4A1B2C3D4E5F000000000008 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A1B2C3D4E5F00000000000D /* SimpleSyncSwiftData.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4A1B2C3D4E5F000000000009 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4A1B2C3D4E5F000000000002 /* SimpleSyncSwiftData */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A1B2C3D4E5F000000000015 /* Build configuration list for PBXNativeTarget "SimpleSyncSwiftData" */;
+			buildPhases = (
+				4A1B2C3D4E5F000000000003 /* Sources */,
+				4A1B2C3D4E5F000000000004 /* Frameworks */,
+				4A1B2C3D4E5F000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SimpleSyncSwiftData;
+			packageProductDependencies = (
+				4A1B2C3D4E5F00000000001B /* EnsemblesSwiftData */,
+				4A1B2C3D4E5F00000000001C /* Ensembles */,
+				4A1B2C3D4E5F00000000001D /* EnsemblesLocalFile */,
+			);
+			productName = SimpleSyncSwiftData;
+			productReference = 4A1B2C3D4E5F00000000000D /* SimpleSyncSwiftData.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A1B2C3D4E5F000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 4A1B2C3D4E5F000000000014 /* Build configuration list for PBXProject "SimpleSyncSwiftData" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4A1B2C3D4E5F000000000006;
+			packageReferences = (
+				4A1B2C3D4E5F00000000001A /* XCRemoteSwiftPackageReference "Ensembles3" */,
+			);
+			productRefGroup = 4A1B2C3D4E5F000000000008 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4A1B2C3D4E5F000000000002 /* SimpleSyncSwiftData */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4A1B2C3D4E5F000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4A1B2C3D4E5F000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1B2C3D4E5F00000000000E /* SimpleSyncSwiftDataApp.swift in Sources */,
+				4A1B2C3D4E5F00000000000F /* DeviceView.swift in Sources */,
+				4A1B2C3D4E5F000000000010 /* NumberItem.swift in Sources */,
+				4A1B2C3D4E5F00000000001E /* SyncController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A1B2C3D4E5F000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		4A1B2C3D4E5F000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		4A1B2C3D4E5F000000000018 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ensembles.SimpleSyncSwiftData;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		4A1B2C3D4E5F000000000019 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ensembles.SimpleSyncSwiftData;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4A1B2C3D4E5F000000000014 /* Build configuration list for PBXProject "SimpleSyncSwiftData" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A1B2C3D4E5F000000000016 /* Debug */,
+				4A1B2C3D4E5F000000000017 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A1B2C3D4E5F000000000015 /* Build configuration list for PBXNativeTarget "SimpleSyncSwiftData" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A1B2C3D4E5F000000000018 /* Debug */,
+				4A1B2C3D4E5F000000000019 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4A1B2C3D4E5F00000000001A /* XCRemoteSwiftPackageReference "Ensembles3" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mentalfaculty/Ensembles3";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4A1B2C3D4E5F00000000001B /* EnsemblesSwiftData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A1B2C3D4E5F00000000001A /* XCRemoteSwiftPackageReference "Ensembles3" */;
+			productName = EnsemblesSwiftData;
+		};
+		4A1B2C3D4E5F00000000001C /* Ensembles */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A1B2C3D4E5F00000000001A /* XCRemoteSwiftPackageReference "Ensembles3" */;
+			productName = Ensembles;
+		};
+		4A1B2C3D4E5F00000000001D /* EnsemblesLocalFile */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A1B2C3D4E5F00000000001A /* XCRemoteSwiftPackageReference "Ensembles3" */;
+			productName = EnsemblesLocalFile;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 4A1B2C3D4E5F000000000001 /* Project object */;
+}
