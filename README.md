@@ -1,5 +1,7 @@
 # Ensembles 3
 
+[![Documentation](https://img.shields.io/badge/Documentation-DocC-blue)](https://mentalfaculty.github.io/Ensembles3/Ensembles/documentation/ensembles/)
+
 **Core Data and SwiftData sync framework for Apple platforms.**
 
 Ensembles synchronizes Core Data and SwiftData persistent stores across devices using an event-sourcing architecture. Your data is stored as opaque files in any cloud service — CloudKit, Google Drive, OneDrive, WebDAV, and more — with optional end-to-end encryption. No custom server required.
