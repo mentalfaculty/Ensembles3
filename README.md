@@ -2,14 +2,18 @@
 
 [![Documentation](https://img.shields.io/badge/Documentation-DocC-blue)](https://mentalfaculty.github.io/Ensembles3/Ensembles/documentation/ensembles/)
 
-Ensembles is the only [local-first](https://www.inkandswitch.com/local-first/) sync framework for Core Data and SwiftData — and unlike most sync frameworks, it requires no custom server infrastructure at all. Ensembles treats the cloud as a dumb transport layer: your data is stored as opaque files that no server can read, interpret, or control. Any storage service your users already have works — CloudKit, Google Drive, OneDrive, WebDAV — because Ensembles only needs a place to put files. And if you need a backend that isn't built in, adding your own is straightforward: just implement the 8-method `CloudFileSystem` protocol. Data stays in your users' own accounts, not shared with any third party. And because your users already pay for their storage, there are no server costs for you either — no infrastructure team, no cloud bills, no scaling headaches. With built-in AES-256-GCM encryption, data can be fully end-to-end encrypted before it ever leaves the device.
+Ensembles is the only [local-first](https://www.inkandswitch.com/local-first/) sync framework for Core Data and SwiftData. Unlike most sync frameworks, it requires no custom server — your data syncs as opaque files through storage your users already have: CloudKit, Google Drive, OneDrive, WebDAV, or any custom backend.
+
+No server can read, interpret, or control your data. It stays in your users' own accounts, and with built-in AES-256-GCM encryption it can be fully end-to-end encrypted before it ever leaves the device.
+
+Because your users already pay for their storage, there are no server costs for you — no infrastructure team, no cloud bills, no scaling headaches.
 
 Ensembles 3 is a modern rewrite of the Ensembles Objective-C framework in pure Swift, with async/await concurrency and Swift Package Manager distribution. It is fully backward compatible with Ensembles 2 cloud data.
 
 ## Why Ensembles?
 
 - **Truly local-first** — not just offline-first. Cloud data is opaque files, not structured records a server can read. No vendor can inspect, lock, or hold your data hostage.
-- **No custom server, no cloud costs** — unlike other sync frameworks, there's no server to deploy or pay for. Users sync through their own storage accounts, so there are no cloud bills for you.
+- **No custom server, no cloud costs, no cloud team** — unlike other sync frameworks, there's no server to deploy or pay for. Users sync through their own storage accounts, so there are no cloud bills for you.
 - **Any cloud backend** — 10 built-in backends including CloudKit, Google Drive, OneDrive, pCloud, and WebDAV. Not locked to iCloud. Implement the `CloudFileSystem` protocol (8 methods) to add your own.
 - **End-to-end encrypted** — AES-256-GCM encryption before data leaves the device. No need to rely on Apple's Advanced Data Protection.
 - **Full Core Data fidelity** — ordered relationships work. Validation rules preserved. No model compromises required.
@@ -26,7 +30,7 @@ Ensembles 3 is a modern rewrite of the Ensembles Objective-C framework in pure S
 | Custom server required | No — uses existing storage | No — but locked to Apple | No — but locked to Apple |
 | Decentralized | Yes — no central authority | No — Apple servers mediate | No — Apple servers mediate |
 | Ordered relationships | Yes | No | No |
-| Validation rules | Fully preserved | Relaxed | All properties optional |
+| Validation rules | Fully preserved | Relaxed | All relationships optional |
 | E2E encryption | Built-in (AES-256-GCM) | Requires ADP | Requires ADP |
 | Custom backends | Yes (8-method protocol) | No | No |
 | Conflict resolution | Revision tracking + delegate | Last-writer-wins | Last-writer-wins |
