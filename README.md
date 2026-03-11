@@ -1,4 +1,4 @@
-# Ensembles 3
+# Ensembles 3 — Local-First Sync for Core Data and SwiftData
 
 [![Documentation](https://img.shields.io/badge/Documentation-DocC-blue)](https://mentalfaculty.github.io/Ensembles3/Ensembles/documentation/ensembles/)
 
