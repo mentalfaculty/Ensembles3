@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0-beta.2
+
+- **Rename `merge()` to `sync()`** across all public APIs (`SyncOptions`, `isSyncing`, `SyncingPhase`)
+- **Trial license support** — time-limited trial keys that expire on a calendar date
+- **License portal redesign** — dark theme, bundle prefix validation
+- **Example apps** included in both binary and source distribution repos
+- **Source distribution repo** — premium customers can build from source via private `Ensembles3-Source` repo
+- **Release script** now publishes both binary and source distribution repos in a single command
+
 ## 3.0.0-beta.1
 
 First public beta of Ensembles 3 — a complete Swift rewrite of the Ensembles sync framework.
