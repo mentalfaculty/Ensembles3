@@ -1,10 +1,126 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta http-equiv="refresh" content="0; url=Ensembles/documentation/ensembles/">
-<title>Ensembles Documentation</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ensembles 3 Documentation</title>
+<style>
+  :root {
+    --bg: #fff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --card-bg: #f5f5f7;
+    --card-border: #d2d2d7;
+    --link: #0066cc;
+    --link-hover: #004499;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1d1d1f;
+      --text: #f5f5f7;
+      --muted: #a1a1a6;
+      --card-bg: #2c2c2e;
+      --card-border: #3a3a3c;
+      --link: #2997ff;
+      --link-hover: #64b5ff;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 3rem 1.5rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .subtitle { color: var(--muted); font-size: 1.1rem; margin-bottom: 2.5rem; }
+  h2 { font-size: 1.1rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 2rem 0 0.75rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+  .card {
+    display: block;
+    padding: 1rem 1.25rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--link); }
+  .card .name { font-weight: 600; font-size: 0.95rem; }
+  .card .desc { font-size: 0.82rem; color: var(--muted); margin-top: 0.25rem; }
+</style>
 </head>
 <body>
-<p>Redirecting to <a href="Ensembles/documentation/ensembles/">Ensembles documentation</a>...</p>
+<h1>Ensembles 3</h1>
+<p class="subtitle">API Reference Documentation</p>
+
+<h2>Core</h2>
+<div class="grid">
+  <a class="card" href="Ensembles/documentation/ensembles/">
+    <div class="name">Ensembles</div>
+    <div class="desc">Core framework — ensemble, event store, sync engine, and protocols.</div>
+  </a>
+  <a class="card" href="EnsemblesSwiftData/documentation/ensemblesswiftdata/">
+    <div class="name">EnsemblesSwiftData</div>
+    <div class="desc">SwiftData integration with SwiftDataEnsemble.</div>
+  </a>
+</div>
+
+<h2>Cloud Backends</h2>
+<div class="grid">
+  <a class="card" href="EnsemblesCloudKit/documentation/ensemblescloudkit/">
+    <div class="name">EnsemblesCloudKit</div>
+    <div class="desc">Sync via iCloud using CloudKit.</div>
+  </a>
+  <a class="card" href="EnsemblesGoogleDrive/documentation/ensemblesgoogledrive/">
+    <div class="name">EnsemblesGoogleDrive</div>
+    <div class="desc">Sync via Google Drive REST API v3.</div>
+  </a>
+  <a class="card" href="EnsemblesOneDrive/documentation/ensemblesonedrive/">
+    <div class="name">EnsemblesOneDrive</div>
+    <div class="desc">Sync via Microsoft OneDrive (Graph API).</div>
+  </a>
+  <a class="card" href="EnsemblesPCloud/documentation/ensemblespcloud/">
+    <div class="name">EnsemblesPCloud</div>
+    <div class="desc">Sync via pCloud REST API.</div>
+  </a>
+  <a class="card" href="EnsemblesWebDAV/documentation/ensembleswebdav/">
+    <div class="name">EnsemblesWebDAV</div>
+    <div class="desc">Sync via any WebDAV server.</div>
+  </a>
+  <a class="card" href="EnsemblesBox/documentation/ensemblesbox/">
+    <div class="name">EnsemblesBox</div>
+    <div class="desc">Sync via Box cloud storage.</div>
+  </a>
+  <a class="card" href="EnsemblesS3/documentation/ensembless3/">
+    <div class="name">EnsemblesS3</div>
+    <div class="desc">Sync via Amazon S3.</div>
+  </a>
+</div>
+
+<h2>Utilities</h2>
+<div class="grid">
+  <a class="card" href="EnsemblesEncrypted/documentation/ensemblesencrypted/">
+    <div class="name">EnsemblesEncrypted</div>
+    <div class="desc">AES-256-GCM encryption wrapper for any backend.</div>
+  </a>
+  <a class="card" href="EnsemblesLocalFile/documentation/ensembleslocalfile/">
+    <div class="name">EnsemblesLocalFile</div>
+    <div class="desc">Local filesystem backend for testing and shared folders.</div>
+  </a>
+  <a class="card" href="EnsemblesMemory/documentation/ensemblesmemory/">
+    <div class="name">EnsemblesMemory</div>
+    <div class="desc">In-memory backend for unit testing.</div>
+  </a>
+</div>
+
 </body>
 </html>
