@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="21754" systemVersion="22F66" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="">
+    <entity name="A" syncable="YES">
+        <relationship name="inverseObject" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="A" inverseName="relatedObjects" inverseEntity="A"/>
+        <relationship name="relatedObjects" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="A" inverseName="inverseObject" inverseEntity="A"/>
+    </entity>
+    <entity name="B" parentEntity="A" syncable="YES"/>
+    <entity name="BatchChild" syncable="YES">
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="batchGrandParents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="BatchGrandParent" inverseName="batchChildren" inverseEntity="BatchGrandParent"/>
+        <relationship name="batchParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchParent" inverseName="batchChildren" inverseEntity="BatchParent"/>
+        <relationship name="friend" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="friendTo" inverseEntity="BatchChild"/>
+        <relationship name="friendTo" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="friend" inverseEntity="BatchChild"/>
+        <relationship name="largeDataBlob" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="LargeDataBlob" inverseName="batchChild" inverseEntity="LargeDataBlob"/>
+        <relationship name="siblings" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="siblingsTo" inverseEntity="BatchChild"/>
+        <relationship name="siblingsTo" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="siblings" inverseEntity="BatchChild"/>
+        <userInfo>
+            <entry key="CDEMigrationBatchSizeKey" value="500"/>
+            <entry key="CDEMigrationPriorityKey" value="20"/>
+        </userInfo>
+    </entity>
+    <entity name="BatchGrandParent" syncable="YES">
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="batchChildren" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="batchGrandParents" inverseEntity="BatchChild"/>
+        <relationship name="batchParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchParent" inverseName="batchGrandParent" inverseEntity="BatchParent"/>
+    </entity>
+    <entity name="BatchParent" syncable="YES">
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="batchChildren" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="BatchChild" inverseName="batchParent" inverseEntity="BatchChild"/>
+        <relationship name="batchGrandParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchGrandParent" inverseName="batchParent" inverseEntity="BatchGrandParent"/>
+        <userInfo>
+            <entry key="CDEMigrationBatchSizeKey" value="50"/>
+            <entry key="CDEMigrationPriorityKey" value="10"/>
+        </userInfo>
+    </entity>
+    <entity name="C" parentEntity="B" syncable="YES"/>
+    <entity name="Child" syncable="YES">
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="maxedParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Parent" inverseName="maxedChildren" inverseEntity="Parent"/>
+        <relationship name="orderedParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Parent" inverseName="orderedChildren" inverseEntity="Parent"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Parent" inverseName="child" inverseEntity="Parent"/>
+        <relationship name="parentWithSiblings" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Parent" inverseName="children" inverseEntity="Parent"/>
+        <relationship name="testFriends" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Parent" inverseName="friends" inverseEntity="Parent"/>
+    </entity>
+    <entity name="DerivedChild" parentEntity="Child" syncable="YES">
+        <attribute name="childAttribute" optional="YES" attributeType="String"/>
+        <relationship name="derivedParent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DerivedParent" inverseName="derivedChildren" inverseEntity="DerivedParent"/>
+    </entity>
+    <entity name="DerivedParent" parentEntity="Parent" syncable="YES">
+        <relationship name="derivedChildren" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DerivedChild" inverseName="derivedParent" inverseEntity="DerivedChild"/>
+    </entity>
+    <entity name="LargeDataBlob" syncable="YES">
+        <attribute name="data" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <relationship name="batchChild" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BatchChild" inverseName="largeDataBlob" inverseEntity="BatchChild"/>
+        <userInfo>
+            <entry key="CDEMigrationBatchSizeKey" value="10"/>
+            <entry key="CDEMigrationPriorityKey" value="100"/>
+        </userInfo>
+    </entity>
+    <entity name="Parent" syncable="YES">
+        <attribute name="data" optional="YES" attributeType="Binary" storedInTruthFile="YES"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="doubleProperty" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO"/>
+        <attribute name="floatProperty" optional="YES" attributeType="Float" defaultValueString="0.0" usesScalarValueType="NO"/>
+        <attribute name="integer64Attribute" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="NO"/>
+        <attribute name="invalidatingAttribute" attributeType="Integer 16" minValueString="0" defaultValueString="0" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="child" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Child" inverseName="parent" inverseEntity="Child"/>
+        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Child" inverseName="parentWithSiblings" inverseEntity="Child"/>
+        <relationship name="friends" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Child" inverseName="testFriends" inverseEntity="Child"/>
+        <relationship name="maxedChildren" optional="YES" toMany="YES" maxCount="2" deletionRule="Cascade" destinationEntity="Child" inverseName="maxedParent" inverseEntity="Child"/>
+        <relationship name="orderedChildren" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="Child" inverseName="orderedParent" inverseEntity="Child"/>
+        <relationship name="relatedParents" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Parent" inverseName="relatedParentsInverse" inverseEntity="Parent"/>
+        <relationship name="relatedParentsInverse" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Parent" inverseName="relatedParents" inverseEntity="Parent"/>
+    </entity>
+    <entity name="TransformableContainer" syncable="YES">
+        <attribute name="attributedString" optional="YES" attributeType="Transformable"/>
+        <attribute name="formerlyTransformableData" optional="YES" attributeType="Binary" valueTransformerName=""/>
+        <attribute name="insecureCustomTransformerString" optional="YES" attributeType="Transformable" valueTransformerName="CDEInsecureTestTransformer"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="secureArrayOfStrings" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformer"/>
+        <attribute name="secureCustomTransformerString" optional="YES" attributeType="Transformable" valueTransformerName="CDESecureTestTransformer"/>
+    </entity>
+</model>
