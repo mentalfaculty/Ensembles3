@@ -8,44 +8,38 @@ struct EventMigratorMultipleFileTests {
 
     let setup: TestEventStoreSetup
     let migrator: EventMigrator
-    let eventID: NSManagedObjectID
+    let eventId: Int64
     let testModel: NSManagedObjectModel
 
     init() throws {
         let s = try TestEventStoreSetup(useDiskTestStore: true, loadTestModel: true)
         let model = s.testModel!
-        let moc = s.context
 
-        nonisolated(unsafe) var capturedEventID: NSManagedObjectID!
-        moc.performAndWait {
-            let modEvent = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: moc) as! StoreModificationEvent
-            modEvent.timestamp = 123
-            modEvent.type = StoreModificationEventType.merge.rawValue
-            modEvent.globalCount = 0
+        let modEvent = try s.eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .merge,
+            timestamp: 123,
+            globalCount: 0
+        )
+        try s.eventStore.insertRevision(persistentStoreIdentifier: s.persistentStoreIdentifier, revisionNumber: 0, eventId: modEvent.id, isEventRevision: true)
 
-            let revision = EventRevision.makeEventRevision(forPersistentStoreIdentifier: s.persistentStoreIdentifier, revisionNumber: 0, in: moc)
-            modEvent.eventRevision = revision
-
-            for _ in 0..<100 {
-                let globalId = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: moc) as! GlobalIdentifier
-                globalId.globalIdentifier = ProcessInfo.processInfo.globallyUniqueString
-                globalId.nameOfEntity = "Parent"
-
-                let objectChange = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: moc) as! ObjectChange
-                objectChange.nameOfEntity = "Parent"
-                objectChange.objectChangeType = .insert
-                objectChange.storeModificationEvent = modEvent
-                objectChange.globalIdentifier = globalId
-                objectChange.propertyChangeValues = [] as NSArray
-            }
-
-            try! moc.save()
-            capturedEventID = modEvent.objectID
+        for _ in 0..<100 {
+            let globalId = try s.eventStore.insertGlobalIdentifier(
+                globalIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+                nameOfEntity: "Parent"
+            )
+            try s.eventStore.insertObjectChange(
+                type: .insert,
+                nameOfEntity: "Parent",
+                eventId: modEvent.id,
+                globalIdentifierId: globalId.id,
+                propertyChanges: []
+            )
         }
 
         setup = s
         migrator = EventMigrator(eventStore: s.eventStore, managedObjectModel: model)
-        eventID = capturedEventID
+        eventId = modEvent.id
         testModel = model
     }
 
@@ -64,14 +58,14 @@ struct EventMigratorMultipleFileTests {
     @Test("Exporting single file")
     func exportingSingleFile() async throws {
         setBatchSize(100)
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
         #expect(fileURLs.count == 1)
     }
 
     @Test("Exporting two equal batches")
     func exportingTwoEqualBatches() async throws {
         setBatchSize(50)
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
         #expect(fileURLs.count == 2)
 
         let json1 = jsonFromURL(fileURLs[0])
@@ -83,7 +77,7 @@ struct EventMigratorMultipleFileTests {
     @Test("Exporting small third batch")
     func exportingSmallThirdBatch() async throws {
         setBatchSize(49)
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
         #expect(fileURLs.count == 3)
 
         let json0 = jsonFromURL(fileURLs[0])!
@@ -103,7 +97,7 @@ struct EventMigratorMultipleFileTests {
     @Test("Files contain distinct object changes")
     func filesContainDistinctObjectChanges() async throws {
         setBatchSize(51)
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
         #expect(fileURLs.count == 2)
 
         var globalIds = Set<String>()
@@ -126,35 +120,32 @@ struct EventMigratorMultipleFileTests {
     @Test("Export and reimport")
     func exportAndReimport() async throws {
         setBatchSize(50)
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
 
         // Delete event from event store
-        setup.context.performAndWait {
-            let event = try! setup.context.existingObject(with: eventID) as! StoreModificationEvent
-            setup.context.delete(event)
-            try! setup.context.save()
+        try setup.eventStore.deleteEvent(id: eventId)
 
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            let events = (try? setup.context.fetch(fetch)) ?? []
-            #expect(events.count == 0)
-        }
+        let remainingEvents = try setup.eventStore.fetchCompleteEvents()
+        #expect(remainingEvents.count == 0)
 
         // Reimport
-        let newEventID = try await migrator.migrateEventIn(from: fileURLs)
+        let newEventId = try await migrator.migrateEventIn(from: fileURLs)
 
-        setup.context.performAndWait {
-            #expect(newEventID != nil)
+        #expect(newEventId != nil)
 
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            let events = (try? setup.context.fetch(fetch)) ?? []
-            #expect(events.count == 1)
+        let events = try setup.eventStore.fetchCompleteEvents()
+        #expect(events.count == 1)
 
-            let event = events.last!
-            #expect(event.objectID == newEventID)
-            #expect(event.objectChanges.count == 100)
+        let event = events.last!
+        #expect(event.id == newEventId)
 
-            let globalIdStrings = Set(event.objectChanges.compactMap { $0.globalIdentifier?.globalIdentifier })
-            #expect(globalIdStrings.count == 100)
-        }
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: event.id)
+        #expect(changes.count == 100)
+
+        let globalIdStrings = Set(try changes.compactMap { change -> String? in
+            let gid = try setup.eventStore.fetchGlobalIdentifier(id: change.globalIdentifierId)
+            return gid?.globalIdentifier
+        })
+        #expect(globalIdStrings.count == 100)
     }
 }

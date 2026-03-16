@@ -8,67 +8,36 @@ struct EventMigratorTests {
 
     let setup: TestEventStoreSetup
     let migrator: EventMigrator
-    let eventID: NSManagedObjectID
+    let eventId: Int64
 
     init() throws {
         let s = try TestEventStoreSetup(useDiskTestStore: true, loadTestModel: true)
-        let moc = s.context
 
-        nonisolated(unsafe) var capturedEventID: NSManagedObjectID!
-        moc.performAndWait {
-            let modEvent = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: moc) as! StoreModificationEvent
-            modEvent.timestamp = 123
-            modEvent.type = StoreModificationEventType.merge.rawValue
-            modEvent.globalCount = 0
+        let modEvent = try s.eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .merge,
+            timestamp: 123,
+            globalCount: 0
+        )
+        try s.eventStore.insertRevision(persistentStoreIdentifier: s.persistentStoreIdentifier, revisionNumber: 0, eventId: modEvent.id, isEventRevision: true)
 
-            let revision = EventRevision.makeEventRevision(forPersistentStoreIdentifier: s.persistentStoreIdentifier, revisionNumber: 0, in: moc)
-            modEvent.eventRevision = revision
+        let globalId1 = try s.eventStore.insertGlobalIdentifier(globalIdentifier: "123", nameOfEntity: "Parent")
+        let globalId2 = try s.eventStore.insertGlobalIdentifier(globalIdentifier: "1234", nameOfEntity: "Child")
+        let globalId3 = try s.eventStore.insertGlobalIdentifier(globalIdentifier: "1234", nameOfEntity: "Child")
 
-            let globalId1 = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: moc) as! GlobalIdentifier
-            globalId1.globalIdentifier = "123"
-            globalId1.nameOfEntity = "Parent"
-
-            let globalId2 = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: moc) as! GlobalIdentifier
-            globalId2.globalIdentifier = "1234"
-            globalId2.nameOfEntity = "Child"
-
-            let globalId3 = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: moc) as! GlobalIdentifier
-            globalId3.globalIdentifier = "1234"
-            globalId3.nameOfEntity = "Child"
-
-            let objectChange1 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: moc) as! ObjectChange
-            objectChange1.nameOfEntity = "Parent"
-            objectChange1.objectChangeType = .insert
-            objectChange1.storeModificationEvent = modEvent
-            objectChange1.globalIdentifier = globalId1
-            objectChange1.propertyChangeValues = [] as NSArray
-
-            let objectChange2 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: moc) as! ObjectChange
-            objectChange2.nameOfEntity = "Child"
-            objectChange2.objectChangeType = .update
-            objectChange2.storeModificationEvent = modEvent
-            objectChange2.globalIdentifier = globalId2
-            objectChange2.propertyChangeValues = [] as NSArray
-
-            let objectChange3 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: moc) as! ObjectChange
-            objectChange3.nameOfEntity = "Child"
-            objectChange3.objectChangeType = .delete
-            objectChange3.storeModificationEvent = modEvent
-            objectChange3.globalIdentifier = globalId3
-
-            try! moc.save()
-            capturedEventID = modEvent.objectID
-        }
+        try s.eventStore.insertObjectChange(type: .insert, nameOfEntity: "Parent", eventId: modEvent.id, globalIdentifierId: globalId1.id, propertyChanges: [])
+        try s.eventStore.insertObjectChange(type: .update, nameOfEntity: "Child", eventId: modEvent.id, globalIdentifierId: globalId2.id, propertyChanges: [])
+        try s.eventStore.insertObjectChange(type: .delete, nameOfEntity: "Child", eventId: modEvent.id, globalIdentifierId: globalId3.id, propertyChanges: nil)
 
         setup = s
         migrator = EventMigrator(eventStore: s.eventStore, managedObjectModel: s.testModel!)
-        eventID = capturedEventID
+        eventId = modEvent.id
     }
 
     // MARK: - Helpers
 
     private func migrateToFile() async throws -> URL {
-        let fileURLs = try await migrator.migrateStoreModificationEvent(withObjectID: eventID)
+        let fileURLs = try await migrator.migrateStoreModificationEvent(withId: eventId)
         return fileURLs.last!
     }
 
@@ -111,20 +80,15 @@ struct EventMigratorTests {
 
     @Test("Migration of NaN")
     func migrationOfNaN() async throws {
-        setup.context.performAndWait {
-            let fetch = NSFetchRequest<ObjectChange>(entityName: "CDEObjectChange")
-            fetch.predicate = NSPredicate(format: "nameOfEntity = 'Parent'")
-            let changes = (try? setup.context.fetch(fetch)) ?? []
-            let change = changes.first!
-            let notANumberChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
-            notANumberChange.value = NSNumber(value: Double.nan)
-            change.propertyChangeValues = [notANumberChange] as NSArray
-            try! setup.context.save()
-        }
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: eventId)
+        let parentChange = changes.first { $0.nameOfEntity == "Parent" }!
+        let notANumberChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
+        notANumberChange.value = NSNumber(value: Double.nan)
+        try setup.eventStore.updateObjectChangePropertyChanges(id: parentChange.id, propertyChanges: [notANumberChange.toStoredPropertyChange()])
 
         let url = try await migrateToFile()
-        let changes = try changesByEntity(from: url)
-        let parentChanges = changes["Parent"]!
+        let changesByEnt = try changesByEntity(from: url)
+        let parentChanges = changesByEnt["Parent"]!
         let change = parentChanges.last!
         let properties = change["properties"] as! [[String: Any]]
         let property = properties.last!
@@ -135,20 +99,15 @@ struct EventMigratorTests {
 
     @Test("Migration of Infinity")
     func migrationOfInfinity() async throws {
-        setup.context.performAndWait {
-            let fetch = NSFetchRequest<ObjectChange>(entityName: "CDEObjectChange")
-            fetch.predicate = NSPredicate(format: "nameOfEntity = 'Parent'")
-            let changes = (try? setup.context.fetch(fetch)) ?? []
-            let change = changes.first!
-            let infChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
-            infChange.value = NSNumber(value: Double.infinity)
-            change.propertyChangeValues = [infChange] as NSArray
-            try! setup.context.save()
-        }
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: eventId)
+        let parentChange = changes.first { $0.nameOfEntity == "Parent" }!
+        let infChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
+        infChange.value = NSNumber(value: Double.infinity)
+        try setup.eventStore.updateObjectChangePropertyChanges(id: parentChange.id, propertyChanges: [infChange.toStoredPropertyChange()])
 
         let url = try await migrateToFile()
-        let changes = try changesByEntity(from: url)
-        let parentChanges = changes["Parent"]!
+        let changesByEnt = try changesByEntity(from: url)
+        let parentChanges = changesByEnt["Parent"]!
         let change = parentChanges.last!
         let properties = change["properties"] as! [[String: Any]]
         let property = properties.last!
@@ -159,20 +118,15 @@ struct EventMigratorTests {
 
     @Test("Migration of negative Infinity")
     func migrationOfNegativeInfinity() async throws {
-        setup.context.performAndWait {
-            let fetch = NSFetchRequest<ObjectChange>(entityName: "CDEObjectChange")
-            fetch.predicate = NSPredicate(format: "nameOfEntity = 'Parent'")
-            let changes = (try? setup.context.fetch(fetch)) ?? []
-            let change = changes.first!
-            let negInfChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
-            negInfChange.value = NSNumber(value: -Double.infinity)
-            change.propertyChangeValues = [negInfChange] as NSArray
-            try! setup.context.save()
-        }
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: eventId)
+        let parentChange = changes.first { $0.nameOfEntity == "Parent" }!
+        let negInfChange = PropertyChangeValue(type: .attribute, propertyName: "someNumber")
+        negInfChange.value = NSNumber(value: -Double.infinity)
+        try setup.eventStore.updateObjectChangePropertyChanges(id: parentChange.id, propertyChanges: [negInfChange.toStoredPropertyChange()])
 
         let url = try await migrateToFile()
-        let changes = try changesByEntity(from: url)
-        let parentChanges = changes["Parent"]!
+        let changesByEnt = try changesByEntity(from: url)
+        let parentChanges = changesByEnt["Parent"]!
         let change = parentChanges.last!
         let properties = change["properties"] as! [[String: Any]]
         let property = properties.last!
@@ -194,28 +148,19 @@ struct EventMigratorTests {
     @Test("Single event is migrated when multiple events exist")
     func singleEventMigratedWhenMultipleExist() async throws {
         // Add extra event sharing a global identifier
-        setup.context.performAndWait {
-            let extraEvent = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: setup.context) as! StoreModificationEvent
-            extraEvent.timestamp = 124
-            extraEvent.type = StoreModificationEventType.save.rawValue
-            extraEvent.globalCount = 1
+        let extraEvent = try setup.eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .save,
+            timestamp: 124,
+            globalCount: 1
+        )
+        try setup.eventStore.insertRevision(persistentStoreIdentifier: setup.persistentStoreIdentifier, revisionNumber: 1, eventId: extraEvent.id, isEventRevision: true)
 
-            let revision = EventRevision.makeEventRevision(forPersistentStoreIdentifier: setup.persistentStoreIdentifier, revisionNumber: 1, in: setup.context)
-            extraEvent.eventRevision = revision
+        // Reuse existing globalId1
+        let globalId = try setup.eventStore.fetchGlobalIdentifier(globalIdentifier: "123", nameOfEntity: "Parent")
 
-            // Reuse existing globalId1
-            let fetch = NSFetchRequest<GlobalIdentifier>(entityName: "CDEGlobalIdentifier")
-            fetch.predicate = NSPredicate(format: "globalIdentifier = '123' AND nameOfEntity = 'Parent'")
-            let globalId = (try? setup.context.fetch(fetch))?.first
-
-            let objectChange = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: setup.context) as! ObjectChange
-            objectChange.nameOfEntity = "Hello"
-            objectChange.objectChangeType = .update
-            objectChange.storeModificationEvent = extraEvent
-            objectChange.globalIdentifier = globalId
-            objectChange.propertyChangeValues = [] as NSArray
-
-            try! setup.context.save()
+        if let globalId {
+            try setup.eventStore.insertObjectChange(type: .update, nameOfEntity: "Hello", eventId: extraEvent.id, globalIdentifierId: globalId.id, propertyChanges: [])
         }
 
         let types: [StoreModificationEventType] = [.merge, .save]
@@ -234,20 +179,27 @@ struct EventMigratorTests {
         let url = try await migrateToFile()
         var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
         json["storeIdentifier"] = "otherstore"
+        json["uniqueIdentifier"] = ProcessInfo.processInfo.globallyUniqueString
 
         let modifiedData = try JSONSerialization.data(withJSONObject: json)
         try modifiedData.write(to: url)
 
-        let _ = try await migrator.migrateEventIn(from: [url])
+        let newEventId = try await migrator.migrateEventIn(from: [url])
 
-        setup.context.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            let storeEvents = (try? setup.context.fetch(fetch)) ?? []
-            #expect(storeEvents.count == 2)
+        #expect(newEventId != nil)
 
-            let newEvent = storeEvents.first { $0.eventRevision?.persistentStoreIdentifier == "otherstore" }
-            #expect(newEvent != nil)
-            #expect(newEvent?.objectChanges.count == 3)
+        let events = try setup.eventStore.fetchCompleteEvents()
+        #expect(events.count == 2)
+
+        let newEvent = events.first { event in
+            let rev = try? setup.eventStore.fetchEventRevision(eventId: event.id)
+            return rev?.persistentStoreIdentifier == "otherstore"
+        }
+        #expect(newEvent != nil)
+
+        if let newEvent {
+            let changes = try setup.eventStore.fetchObjectChanges(eventId: newEvent.id)
+            #expect(changes.count == 3)
         }
     }
 }

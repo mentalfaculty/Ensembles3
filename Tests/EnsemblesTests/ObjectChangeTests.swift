@@ -1,23 +1,30 @@
 import Testing
 import Foundation
-import CoreData
 @_spi(Testing) import Ensembles
 
 @Suite("ObjectChange")
 struct ObjectChangeTests {
 
-    @Test("Object change type round-trip")
+    @Test("Object change type is set correctly at insert")
     func objectChangeType() throws {
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid = stack.addGlobalIdentifier("id1", entity: "EntityA")
-            let event = stack.addModEvent(store: "store1", revision: 0)
-            let change = stack.addObjectChange(type: .insert, globalIdentifier: gid, event: event)
-            #expect(change.objectChangeType == .insert)
-            change.objectChangeType = .update
-            #expect(change.objectChangeType == .update)
-            #expect(change.type == ObjectChangeType.update.rawValue)
-        }
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("id1", entity: "EntityA")
+        let event = try setup.addModEvent(store: "store1", revision: 0)
+
+        let insertChange = try setup.addObjectChange(type: .insert, globalIdentifier: gid, event: event)
+        #expect(insertChange.type == .insert)
+
+        let gid2 = try setup.addGlobalIdentifier("id2", entity: "EntityA")
+        let updateChange = try setup.addObjectChange(type: .update, globalIdentifier: gid2, event: event)
+        #expect(updateChange.type == .update)
+
+        let gid3 = try setup.addGlobalIdentifier("id3", entity: "EntityA")
+        let deleteChange = try setup.addObjectChange(type: .delete, globalIdentifier: gid3, event: event)
+        #expect(deleteChange.type == .delete)
+
+        // Verify round-trip through database
+        let fetched = try setup.eventStore.fetchObjectChange(id: updateChange.id)!
+        #expect(fetched.type == .update)
     }
 
     @Test("Object change type raw values")
@@ -29,164 +36,130 @@ struct ObjectChangeTests {
 
     @Test("Count of object changes in events")
     func countObjectChanges() throws {
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid1 = stack.addGlobalIdentifier("id1", entity: "EntityA")
-            let gid2 = stack.addGlobalIdentifier("id2", entity: "EntityA")
-            let event = stack.addModEvent(store: "store1", revision: 0)
-            _ = stack.addObjectChange(type: .insert, globalIdentifier: gid1, event: event)
-            _ = stack.addObjectChange(type: .insert, globalIdentifier: gid2, event: event)
-            try! stack.context.save()
+        let setup = try TestEventStoreSetup()
+        let gid1 = try setup.addGlobalIdentifier("id1", entity: "EntityA")
+        let gid2 = try setup.addGlobalIdentifier("id2", entity: "EntityA")
+        let event = try setup.addModEvent(store: "store1", revision: 0)
+        try setup.addObjectChange(type: .insert, globalIdentifier: gid1, event: event)
+        try setup.addObjectChange(type: .insert, globalIdentifier: gid2, event: event)
 
-            let count = ObjectChange.countOfObjectChanges(in: [event])
-            #expect(count == 2)
-        }
+        let count = try setup.eventStore.fetchObjectChangeCount(eventIds: [event.id])
+        #expect(count == 2)
     }
 
     @Test("Merge values from another change")
     func mergeValues() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid = stack.addGlobalIdentifier("id1", entity: "EntityA")
-            let event1 = stack.addModEvent(store: "store1", revision: 0)
-            let change1 = stack.addObjectChange(type: .update, globalIdentifier: gid, event: event1)
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("id1", entity: "EntityA")
+        let event1 = try setup.addModEvent(store: "store1", revision: 0)
 
-            let attrValue1 = PropertyChangeValue(type: .attribute, propertyName: "name")
-            attrValue1.value = "Alice" as NSString
-            change1.propertyChangeValues = [attrValue1] as NSArray
+        let storedValue1 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "name", value: .string("Alice"))
+        let change1 = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event1, propertyChanges: [storedValue1])
 
-            let event2 = stack.addModEvent(store: "store2", revision: 0)
-            let change2 = stack.addObjectChange(type: .update, globalIdentifier: gid, event: event2)
+        let event2 = try setup.addModEvent(store: "store2", revision: 0)
+        let storedValue2 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "name", value: .string("Bob"))
+        let storedValue3 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "age", value: .int(30))
+        let change2 = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event2, propertyChanges: [storedValue2, storedValue3])
 
-            let attrValue2 = PropertyChangeValue(type: .attribute, propertyName: "name")
-            attrValue2.value = "Bob" as NSString
-            let attrValue3 = PropertyChangeValue(type: .attribute, propertyName: "age")
-            attrValue3.value = NSNumber(value: 30)
-            change2.propertyChangeValues = [attrValue2, attrValue3] as NSArray
+        // Merge change2 into change1, treating change2 as subordinate
+        let merged = change1.mergingValues(from: change2, treatOtherAsSubordinate: true)
 
-            // Merge change2 into change1, treating change2 as subordinate
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: true)
+        let mergedValues = merged.propertyChangeValues ?? []
+        let nameValue = mergedValues.first(where: { $0.propertyName == "name" })
+        let ageValue = mergedValues.first(where: { $0.propertyName == "age" })
 
-            let merged = change1.propertyChangeValues as? [PropertyChangeValue] ?? []
-            let nameValue = merged.first(where: { $0.propertyName == "name" })
-            let ageValue = merged.first(where: { $0.propertyName == "age" })
-
-            #expect(merged.count == 2)
-            // When subordinate=true, existing value wins for attributes
-            #expect(nameValue?.value as? String == "Alice")
-            #expect(ageValue?.value as? NSNumber == NSNumber(value: 30))
-        }
+        #expect(mergedValues.count == 2)
+        // When subordinate=true, existing value wins for attributes
+        #expect(nameValue?.value == .string("Alice"))
+        #expect(ageValue?.value == .int(30))
     }
 
     @Test("Merge values with subordinate false overrides")
     func mergeValuesSubordinateFalse() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let change1 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: stack.context) as! ObjectChange
-            let value1 = PropertyChangeValue(type: .attribute, propertyName: "a")
-            value1.value = "A" as NSString
-            change1.propertyChangeValues = [value1] as NSArray
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("id1", entity: "EntityA")
+        let event = try setup.addModEvent(store: "store1", revision: 0)
 
-            let change2 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: stack.context) as! ObjectChange
-            let value2 = PropertyChangeValue(type: .attribute, propertyName: "a")
-            value2.value = "AA" as NSString
-            change2.propertyChangeValues = [value2] as NSArray
+        let value1 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "a", value: .string("A"))
+        let change1 = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event, propertyChanges: [value1])
 
-            // subordinate=true: existing value wins
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: true)
-            var result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "A")
+        let value2 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "a", value: .string("AA"))
+        let event2 = try setup.addModEvent(store: "store2", revision: 0)
+        let change2 = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event2, propertyChanges: [value2])
 
-            // subordinate=false: incoming value wins
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: false)
-            result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "AA")
-        }
+        // subordinate=true: existing value wins
+        let merged1 = change1.mergingValues(from: change2, treatOtherAsSubordinate: true)
+        let result1 = merged1.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result1?.value == .string("A"))
+
+        // subordinate=false: incoming value wins
+        let merged2 = change1.mergingValues(from: change2, treatOtherAsSubordinate: false)
+        let result2 = merged2.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result2?.value == .string("AA"))
     }
 
     @Test("Merge values with differing property names")
     func mergeValuesWithDifferingPropertyNames() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let change1 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: stack.context) as! ObjectChange
-            let value1 = PropertyChangeValue(type: .attribute, propertyName: "a")
-            value1.value = "A" as NSString
-            change1.propertyChangeValues = [value1] as NSArray
+        let value1 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "a", value: .string("A"))
 
-            let change2 = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: stack.context) as! ObjectChange
-            change2.propertyChangeValues = [] as NSArray
+        let change1 = ObjectChange(id: 1, type: .update, nameOfEntity: "E", eventId: 1, globalIdentifierId: 1, propertyChangeValues: [value1])
+        let change2 = ObjectChange(id: 2, type: .update, nameOfEntity: "E", eventId: 1, globalIdentifierId: 1, propertyChangeValues: [])
 
-            // Merge empty into non-empty: value persists
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: true)
-            var result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "A")
+        // Merge empty into non-empty: value persists
+        var merged = change1.mergingValues(from: change2, treatOtherAsSubordinate: true)
+        var result = merged.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result?.value == .string("A"))
 
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: false)
-            result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "A")
+        merged = change1.mergingValues(from: change2, treatOtherAsSubordinate: false)
+        result = merged.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result?.value == .string("A"))
 
-            // Merge non-empty into empty: value transferred
-            change1.propertyChangeValues = [] as NSArray
-            change2.propertyChangeValues = [value1] as NSArray
+        // Merge non-empty into empty: value transferred
+        let change1Empty = ObjectChange(id: 1, type: .update, nameOfEntity: "E", eventId: 1, globalIdentifierId: 1, propertyChangeValues: [])
+        let change2WithValue = ObjectChange(id: 2, type: .update, nameOfEntity: "E", eventId: 1, globalIdentifierId: 1, propertyChangeValues: [value1])
 
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: true)
-            result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "A")
+        merged = change1Empty.mergingValues(from: change2WithValue, treatOtherAsSubordinate: true)
+        result = merged.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result?.value == .string("A"))
 
-            change1.mergeValues(from: change2, treatChangeAsSubordinate: false)
-            result = (change1.propertyChangeValues as? [PropertyChangeValue])?.last
-            #expect(result?.value as? String == "A")
-        }
+        merged = change1Empty.mergingValues(from: change2WithValue, treatOtherAsSubordinate: false)
+        result = merged.propertyChangeValues?.first(where: { $0.propertyName == "a" })
+        #expect(result?.value == .string("A"))
     }
 
-    @Test("Required properties: missing nameOfEntity prevents save")
+    @Test("Required properties: nameOfEntity is non-optional")
     func requiredPropertiesNameOfEntity() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid = stack.addGlobalIdentifier("123", entity: "CDEObjectChange")
-            let event = stack.addModEvent(store: "1234", revision: 0, timestamp: 123)
-            let change = stack.addObjectChange(type: .update, globalIdentifier: gid, event: event)
-            change.propertyChangeValues = [PropertyChangeValue(type: .attribute, propertyName: "a")] as NSArray
-
-            change.nameOfEntity = nil
-            #expect((try? stack.context.save()) == nil)
-        }
+        // In the struct model, nameOfEntity is a non-optional String,
+        // so this constraint is enforced at compile time. Verify it's present after insert.
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("123", entity: "CDEObjectChange")
+        let event = try setup.addModEvent(store: "1234", revision: 0, timestamp: 123)
+        let change = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event)
+        #expect(!change.nameOfEntity.isEmpty)
     }
 
-    @Test("Required properties: all valid saves successfully")
+    @Test("Required properties: all valid inserts successfully")
     func requiredPropertiesAllValid() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid = stack.addGlobalIdentifier("123", entity: "CDEObjectChange")
-            let event = stack.addModEvent(store: "1234", revision: 0, timestamp: 123)
-            let change = stack.addObjectChange(type: .update, globalIdentifier: gid, event: event)
-            change.propertyChangeValues = [PropertyChangeValue(type: .attribute, propertyName: "c")] as NSArray
-
-            #expect((try? stack.context.save()) != nil)
-        }
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("123", entity: "CDEObjectChange")
+        let event = try setup.addModEvent(store: "1234", revision: 0, timestamp: 123)
+        let storedChange = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "c")
+        let change = try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event, propertyChanges: [storedChange])
+        #expect(change.id > 0)
     }
 
     @Test("Property values saved and restored")
     func propertyValuesSavedAndRestored() throws {
-        PropertyChangeValue.registerTransformer()
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let gid = stack.addGlobalIdentifier("123", entity: "Entity")
-            let event = stack.addModEvent(store: "store1", revision: 0, timestamp: 123)
-            let change = stack.addObjectChange(type: .update, globalIdentifier: gid, event: event)
-            change.propertyChangeValues = [PropertyChangeValue(type: .attribute, propertyName: "val")] as NSArray
+        let setup = try TestEventStoreSetup()
+        let gid = try setup.addGlobalIdentifier("123", entity: "Entity")
+        let event = try setup.addModEvent(store: "store1", revision: 0, timestamp: 123)
+        let storedChange = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "val")
+        try setup.addObjectChange(type: .update, globalIdentifier: gid, event: event, propertyChanges: [storedChange])
 
-            try! stack.context.save()
-            stack.context.refresh(change, mergeChanges: false)
-
-            let values = change.propertyChangeValues as? [PropertyChangeValue] ?? []
-            #expect(values.count == 1)
-            #expect(values.first?.propertyName == "val")
-        }
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: event.id)
+        #expect(changes.count == 1)
+        let values = changes.first?.propertyChangeValues ?? []
+        #expect(values.count == 1)
+        #expect(values.first?.propertyName == "val")
     }
 }

@@ -11,7 +11,6 @@ struct SaveMonitorTests {
     let saveMonitor: SaveMonitor
     let ensemble: TestEnsemble
     let testMOC: NSManagedObjectContext
-    let eventMOC: NSManagedObjectContext
 
     init() throws {
         let s = try TestEventStoreSetup(useDiskTestStore: true, loadTestModel: true)
@@ -27,28 +26,17 @@ struct SaveMonitorTests {
         saveMonitor = monitor
         ensemble = ens
         testMOC = s.testManagedObjectContext!
-        eventMOC = s.context
     }
 
     private func saveTestContext() {
         testMOC.performAndWait {
             try! testMOC.save()
         }
-        // Wait for the async event creation to complete
-        eventMOC.performAndWait { /* force synchronization */ }
     }
 
-    private func fetchModEvents() -> [StoreModificationEvent] {
-        nonisolated(unsafe) var result: [StoreModificationEvent] = []
-        eventMOC.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            fetch.sortDescriptors = [
-                NSSortDescriptor(key: "eventRevision.persistentStoreIdentifier", ascending: true),
-                NSSortDescriptor(key: "eventRevision.revisionNumber", ascending: true)
-            ]
-            result = (try? eventMOC.fetch(fetch)) ?? []
-        }
-        return result
+    private func fetchModEvents() throws -> [StoreModificationEvent] {
+        let events = try setup.eventStore.fetchCompleteEvents()
+        return events.sorted()
     }
 
     private func insertParent(name: String = "bob") -> NSManagedObject {
@@ -64,94 +52,82 @@ struct SaveMonitorTests {
     // MARK: - Basic Tests
 
     @Test("No save triggers no event creation")
-    func noSaveTriggersNoEventCreation() {
-        eventMOC.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            let count = (try? eventMOC.count(for: fetch)) ?? -1
-            #expect(count == 0)
-        }
+    func noSaveTriggersNoEventCreation() throws {
+        let count = try setup.eventStore.countAllEvents()
+        #expect(count == 0)
     }
 
     @Test("Save triggers event creation")
-    func saveTriggersEventCreation() {
+    func saveTriggersEventCreation() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            let count = (try? eventMOC.count(for: fetch)) ?? -1
-            #expect(count == 1)
-        }
+        let count = try setup.eventStore.countAllEvents()
+        #expect(count == 1)
     }
 
     @Test("Insert generates object change")
-    func insertGeneratesObjectChange() {
+    func insertGeneratesObjectChange() throws {
         let _ = insertParent()
         saveTestContext()
-        let modEvents = fetchModEvents()
+        let modEvents = try fetchModEvents()
         #expect(modEvents.count == 1)
     }
 
     @Test("Insert store modification event type is correct")
-    func insertEventTypeIsCorrect() {
+    func insertEventTypeIsCorrect() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            #expect(modEvent.storeModificationEventType == .save)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        #expect(modEvent.type == .save)
     }
 
     @Test("Object change count for insert")
-    func objectChangeCountForInsert() {
+    func objectChangeCountForInsert() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            #expect(modEvent.objectChanges.count == 1)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        #expect(changes.count == 1)
     }
 
     @Test("Object change type for insert")
-    func objectChangeTypeForInsert() {
+    func objectChangeTypeForInsert() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            let change = modEvent.objectChanges.first!
-            #expect(change.objectChangeType == .insert)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        let change = changes.first!
+        #expect(change.type == .insert)
     }
 
     @Test("Global identifier is generated for insert")
-    func globalIdentifierIsGeneratedForInsert() {
+    func globalIdentifierIsGeneratedForInsert() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            let change = modEvent.objectChanges.first!
-            #expect(change.globalIdentifier != nil)
-            #expect(change.globalIdentifier?.globalIdentifier != nil)
-            #expect(change.globalIdentifier?.storeURI != nil)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        let change = changes.first!
+        let gid = try setup.eventStore.fetchGlobalIdentifier(id: change.globalIdentifierId)
+        #expect(gid != nil)
+        #expect(!gid!.globalIdentifier.isEmpty)
+        #expect(gid!.storeURI != nil)
     }
 
     @Test("Global count for one save")
-    func globalCountForOneSave() {
+    func globalCountForOneSave() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            #expect(modEvent.globalCount == 0)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        #expect(modEvent.globalCount == 0)
     }
 
     @Test("Global count for two saves")
-    func globalCountForTwoSaves() {
+    func globalCountForTwoSaves() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -160,15 +136,13 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            #expect(modEvent.globalCount == 1)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        #expect(modEvent.globalCount == 1)
     }
 
     @Test("Update generates mod event")
-    func updateGeneratesModEvent() {
+    func updateGeneratesModEvent() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -177,12 +151,12 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        let modEvents = fetchModEvents()
+        let modEvents = try fetchModEvents()
         #expect(modEvents.count == 2)
     }
 
     @Test("Update with nil value")
-    func updateWithNilValue() {
+    func updateWithNilValue() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -191,20 +165,19 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            let change = modEvent.objectChanges.first!
-            let propertyChanges = change.propertyChangeValues as? [PropertyChangeValue] ?? []
-            #expect(propertyChanges.count == 1)
-            let newValue = propertyChanges.last!
-            #expect(newValue.value == nil)
-            #expect(newValue.type == .attribute)
-        }
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        let change = changes.first!
+        let propertyChanges = change.propertyChangeValues ?? []
+        #expect(propertyChanges.count == 1)
+        let newValue = propertyChanges.last!
+        #expect(newValue.value == nil || newValue.value == .null)
+        #expect(newValue.type == PropertyChangeType.attribute.rawValue)
     }
 
     @Test("Save revision numbers")
-    func saveRevisionNumbers() {
+    func saveRevisionNumbers() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -213,28 +186,27 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let firstEvent = modEvents[0]
-            let secondEvent = modEvents[1]
-            #expect(firstEvent.eventRevision?.revisionNumber == 0)
-            #expect(secondEvent.eventRevision?.revisionNumber == 1)
-        }
+        let modEvents = try fetchModEvents()
+        let firstEvent = modEvents[0]
+        let secondEvent = modEvents[1]
+        let firstRev = try setup.eventStore.fetchEventRevision(eventId: firstEvent.id)
+        let secondRev = try setup.eventStore.fetchEventRevision(eventId: secondEvent.id)
+        #expect(firstRev?.revisionNumber == 0)
+        #expect(secondRev?.revisionNumber == 1)
     }
 
     @Test("Revision numbers of other stores for a single store")
-    func revisionNumbersOfOtherStoresForSingleStore() {
+    func revisionNumbersOfOtherStoresForSingleStore() throws {
         let _ = insertParent()
         saveTestContext()
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let firstEvent = modEvents[0]
-            #expect(firstEvent.eventRevisionsOfOtherStores.count == 0)
-        }
+        let modEvents = try fetchModEvents()
+        let firstEvent = modEvents[0]
+        let otherRevisions = try setup.eventStore.fetchOtherStoreRevisions(eventId: firstEvent.id)
+        #expect(otherRevisions.count == 0)
     }
 
     @Test("Update generates object changes")
-    func updateGeneratesObjectChanges() {
+    func updateGeneratesObjectChanges() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -243,22 +215,20 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        eventMOC.performAndWait {
-            let modEvents = fetchModEvents()
-            let modEvent = modEvents.last!
-            let objectChanges = modEvent.objectChanges
-            #expect(objectChanges.count == 1)
+        let modEvents = try fetchModEvents()
+        let modEvent = modEvents.last!
+        let objectChanges = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        #expect(objectChanges.count == 1)
 
-            let change = objectChanges.first!
-            #expect(change.objectChangeType == .update)
+        let change = objectChanges.first!
+        #expect(change.type == .update)
 
-            let propertyChanges = change.propertyChangeValues as? [PropertyChangeValue] ?? []
-            #expect(propertyChanges.count == 1)
-        }
+        let propertyChanges = change.propertyChangeValues ?? []
+        #expect(propertyChanges.count == 1)
     }
 
     @Test("Deletion generates object change")
-    func deletionGeneratesObjectChange() {
+    func deletionGeneratesObjectChange() throws {
         let parent = insertParent()
         saveTestContext()
 
@@ -267,15 +237,14 @@ struct SaveMonitorTests {
         }
         saveTestContext()
 
-        let modEvents = fetchModEvents()
+        let modEvents = try fetchModEvents()
         #expect(modEvents.count == 2)
 
-        eventMOC.performAndWait {
-            let modEvent = modEvents.last!
-            #expect(modEvent.objectChanges.count == 1)
-            let change = modEvent.objectChanges.first!
-            #expect(change.objectChangeType == .delete)
-        }
+        let modEvent = modEvents.last!
+        let objectChanges = try setup.eventStore.fetchObjectChanges(eventId: modEvent.id)
+        #expect(objectChanges.count == 1)
+        let change = objectChanges.first!
+        #expect(change.type == .delete)
     }
 }
 }

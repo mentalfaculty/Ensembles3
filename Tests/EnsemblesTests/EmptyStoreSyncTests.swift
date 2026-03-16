@@ -18,8 +18,7 @@ struct EmptyStoreSyncTests {
     // MARK: - Helpers
 
     private func prepareDevice1WithDataDevice2Empty() async throws {
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("bob", forKey: "name")
+        stack.insertParent(name: "bob", in: stack.context1)
         stack.save(stack.context1)
         try await stack.attachStores()
         try await stack.syncEnsemble(stack.ensemble1)
@@ -37,15 +36,12 @@ struct EmptyStoreSyncTests {
     /// Insert a Parent with a unique name in contextA, sync, check it appears in contextB.
     private func changeInContext(_ contextA: NSManagedObjectContext, appearsInContext contextB: NSManagedObjectContext) async throws -> Bool {
         let uniqueString = ProcessInfo.processInfo.globallyUniqueString
-        let newParent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: contextA)
-        newParent.setValue(uniqueString, forKey: "name")
+        stack.insertParent(name: uniqueString, in: contextA)
         stack.save(contextA)
 
         try await stack.syncChangesAndSuppressRebase()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = (try? contextB.fetch(fetch)) ?? []
-        let parentNames = parents.compactMap { $0.value(forKey: "name") as? String }
+        let parentNames = stack.fetchParents(in: contextB).compactMap { $0.value(forKey: "name") as? String }
         return parentNames.contains(uniqueString)
     }
 
@@ -75,9 +71,8 @@ struct EmptyStoreSyncTests {
         try await stack.ensemble1.sync(options: .forceRebase)
         try await stack.syncChanges()
 
-        let fetchParents = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        #expect(try stack.context1.fetch(fetchParents).count == 4)
-        #expect(try stack.context2.fetch(fetchParents).count == 4)
+        #expect(stack.fetchParents(in: stack.context1).count == 4)
+        #expect(stack.fetchParents(in: stack.context2).count == 4)
 
         #expect(try await changeInContext(stack.context1, appearsInContext: stack.context2))
         #expect(try await changeInContext(stack.context2, appearsInContext: stack.context1))
@@ -93,9 +88,8 @@ struct EmptyStoreSyncTests {
         try await stack.ensemble2.sync(options: .forceRebase)
         try await stack.syncChanges()
 
-        let fetchParents = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        #expect(try stack.context1.fetch(fetchParents).count == 4)
-        #expect(try stack.context2.fetch(fetchParents).count == 4)
+        #expect(stack.fetchParents(in: stack.context1).count == 4)
+        #expect(stack.fetchParents(in: stack.context2).count == 4)
 
         #expect(try await changeInContext(stack.context1, appearsInContext: stack.context2))
         #expect(try await changeInContext(stack.context2, appearsInContext: stack.context1))
@@ -105,16 +99,14 @@ struct EmptyStoreSyncTests {
     func syncWorksAfterRebasingWhileOtherDeviceStillEmpty() async throws {
         try await prepareDevice1WithDataDevice2Merged()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("dave", forKey: "name")
+        stack.insertParent(name: "dave", in: stack.context1)
         stack.save(stack.context1)
 
         try await stack.ensemble1.sync(options: .forceRebase)
         try await stack.syncEnsemble(stack.ensemble2)
 
-        let fetchParents = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        #expect(try stack.context1.fetch(fetchParents).count == 2)
-        #expect(try stack.context2.fetch(fetchParents).count == 2)
+        #expect(stack.fetchParents(in: stack.context1).count == 2)
+        #expect(stack.fetchParents(in: stack.context2).count == 2)
 
         #expect(try await changeInContext(stack.context1, appearsInContext: stack.context2))
         #expect(try await changeInContext(stack.context2, appearsInContext: stack.context1))
@@ -134,16 +126,14 @@ struct EmptyStoreSyncTests {
         try await prepareBothDevicesEmpty()
         try await stack.syncChanges()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("dave", forKey: "name")
+        stack.insertParent(name: "dave", in: stack.context1)
         stack.save(stack.context1)
 
         try await stack.ensemble1.sync(options: .forceRebase)
         try await stack.syncEnsemble(stack.ensemble2)
 
-        let fetchParents = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        #expect(try stack.context1.fetch(fetchParents).count == 1)
-        #expect(try stack.context2.fetch(fetchParents).count == 1)
+        #expect(stack.fetchParents(in: stack.context1).count == 1)
+        #expect(stack.fetchParents(in: stack.context2).count == 1)
 
         #expect(try await changeInContext(stack.context1, appearsInContext: stack.context2))
         #expect(try await changeInContext(stack.context2, appearsInContext: stack.context1))

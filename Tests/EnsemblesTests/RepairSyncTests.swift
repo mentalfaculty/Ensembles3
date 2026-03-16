@@ -19,8 +19,7 @@ struct RepairSyncTests {
     func deletionRepair() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("bob", forKey: "name")
+        let parent = stack.insertParent(name: "bob", in: stack.context1)
         parent.setValue(NSNumber(value: 10.0), forKey: "doubleProperty")
         stack.save(stack.context1)
 

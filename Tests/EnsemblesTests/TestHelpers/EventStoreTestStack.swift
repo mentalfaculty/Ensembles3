@@ -21,60 +21,51 @@ enum TestModelCache {
     }
 }
 
-/// Helper to create an in-memory Core Data stack with the CDEEventStoreModel.
-/// The model is bundled as a resource in the Ensembles target.
+/// Helper to create an EventStore backed by SQLite in a temp directory.
+/// Used by tests that need an event store for creating events, revisions, etc.
 struct EventStoreTestStack: @unchecked Sendable {
-    let context: NSManagedObjectContext
-    let model: NSManagedObjectModel
+    let eventStore: EventStore
+    let tempDirectory: String
 
     init() throws {
-        guard let url = EventStore.eventStoreModelURL else {
-            throw TestError("Could not find CDEEventStoreModel.momd resource")
-        }
-        guard let model = TestModelCache.model(for: url) else {
-            throw TestError("Could not load managed object model from \(url)")
-        }
-        self.model = model
+        tempDirectory = (NSTemporaryDirectory() as NSString).appendingPathComponent("EnsemblesTests_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(atPath: tempDirectory, withIntermediateDirectories: true)
 
-        let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
-        let options: [String: Any] = [
-            NSMigratePersistentStoresAutomaticallyOption: true,
-            NSInferMappingModelAutomaticallyOption: true
-        ]
-        try psc.addPersistentStore(ofType: NSInMemoryStoreType, configurationName: nil, at: nil, options: options)
-        let moc = NSManagedObjectContext(.privateQueue)
-        moc.persistentStoreCoordinator = psc
-        self.context = moc
+        let eventStoreDir = (tempDirectory as NSString).appendingPathComponent("test")
+        try FileManager.default.createDirectory(atPath: eventStoreDir, withIntermediateDirectories: true)
+
+        guard let store = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: tempDirectory) else {
+            throw TestError("Could not create EventStore")
+        }
+        try store.prepareNewEventStore()
+        self.eventStore = store
     }
 
-    func addEventRevision(store: String, revision: RevisionNumber) -> EventRevision {
-        EventRevision.makeEventRevision(forPersistentStoreIdentifier: store, revisionNumber: revision, in: context)
+    @discardableResult
+    func addEventRevision(store: String, revision: RevisionNumber, eventId: Int64) throws -> EventRevision {
+        try eventStore.insertRevision(persistentStoreIdentifier: store, revisionNumber: revision, eventId: eventId, isEventRevision: false)
     }
 
-    func addModEvent(store: String, revision: RevisionNumber, globalCount: GlobalCount = 0, timestamp: TimeInterval = 0) -> StoreModificationEvent {
-        let event = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: context) as! StoreModificationEvent
-        event.storeModificationEventType = .save
-        event.timestamp = timestamp
-        event.globalCount = globalCount
-        event.eventRevision = addEventRevision(store: store, revision: revision)
+    @discardableResult
+    func addModEvent(store: String, revision: RevisionNumber, globalCount: GlobalCount = 0, timestamp: TimeInterval = 0) throws -> StoreModificationEvent {
+        let event = try eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .save,
+            timestamp: timestamp,
+            globalCount: globalCount
+        )
+        try eventStore.insertRevision(persistentStoreIdentifier: store, revisionNumber: revision, eventId: event.id, isEventRevision: true)
         return event
     }
 
-    func addGlobalIdentifier(_ identifier: String, entity: String) -> GlobalIdentifier {
-        let gid = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: context) as! GlobalIdentifier
-        gid.globalIdentifier = identifier
-        gid.nameOfEntity = entity
-        gid.storeURI = nil
-        return gid
+    @discardableResult
+    func addGlobalIdentifier(_ identifier: String, entity: String) throws -> GlobalIdentifier {
+        try eventStore.insertGlobalIdentifier(globalIdentifier: identifier, nameOfEntity: entity, storeURI: nil)
     }
 
-    func addObjectChange(type: ObjectChangeType, globalIdentifier: GlobalIdentifier, event: StoreModificationEvent) -> ObjectChange {
-        let change = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: context) as! ObjectChange
-        change.nameOfEntity = globalIdentifier.nameOfEntity
-        change.objectChangeType = type
-        change.storeModificationEvent = event
-        change.globalIdentifier = globalIdentifier
-        return change
+    @discardableResult
+    func addObjectChange(type: ObjectChangeType, globalIdentifier: GlobalIdentifier, event: StoreModificationEvent, propertyChanges: [StoredPropertyChange]? = nil) throws -> ObjectChange {
+        try eventStore.insertObjectChange(type: type, nameOfEntity: globalIdentifier.nameOfEntity, eventId: event.id, globalIdentifierId: globalIdentifier.id, propertyChanges: propertyChanges)
     }
 
     // MARK: Property Change Value Helpers

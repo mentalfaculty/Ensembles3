@@ -19,15 +19,12 @@ struct TwoWaySyncTests {
     func updateAttributeOnSecondDevice() async throws {
         try await stack.attachStores()
 
-        let parentOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parentOnDevice1.setValue("bob", forKey: "name")
+        let parentOnDevice1 = stack.insertParent(name: "bob", in: stack.context1)
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let parents = stack.fetchParents(in: stack.context2)
-        #expect(parents.count == 1)
-        let parentOnDevice2 = parents.last!
+        let parentOnDevice2 = stack.fetchParents(in: stack.context2).last!
         parentOnDevice2.setValue("dave", forKey: "name")
         stack.save(stack.context2)
 
@@ -41,8 +38,7 @@ struct TwoWaySyncTests {
     func conflictingAttributeUpdates() async throws {
         try await stack.attachStores()
 
-        let parentOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parentOnDevice1.setValue("bob", forKey: "name")
+        let parentOnDevice1 = stack.insertParent(name: "bob", in: stack.context1)
         stack.save(stack.context1)
 
         try await stack.syncChanges()
@@ -54,8 +50,7 @@ struct TwoWaySyncTests {
         // Concurrent update on device 2. Should win due to later timestamp.
         // Small delay ensures device 2's event timestamp is strictly later on fast CI machines.
         try await Task.sleep(for: .milliseconds(10))
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parentOnDevice2 = try stack.context2.fetch(fetch).last!
+        let parentOnDevice2 = stack.fetchParents(in: stack.context2).last!
         #expect(parentOnDevice2.value(forKey: "name") as? String == "bob")
 
         parentOnDevice2.setValue("dave", forKey: "name")
@@ -71,27 +66,18 @@ struct TwoWaySyncTests {
     func repeatedGlobalIdentifiers() async throws {
         try await stack.attachStores()
 
-        var parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("bob", forKey: "name")
-        parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("tom", forKey: "name")
-
-        var child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child.setValue("bob", forKey: "name")
-        child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child.setValue("tom", forKey: "name")
+        stack.insertParent(name: "bob", in: stack.context1)
+        stack.insertParent(name: "tom", in: stack.context1)
+        stack.insertChild(name: "bob", in: stack.context1)
+        stack.insertChild(name: "tom", in: stack.context1)
 
         stack.save(stack.context1)
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = try stack.context2.fetch(fetch)
-        let parentNames = Set(parents.compactMap { $0.value(forKey: "name") as? String })
+        let parentNames = Set(stack.fetchParents(in: stack.context2).compactMap { $0.value(forKey: "name") as? String })
         #expect(parentNames == Set(["bob", "tom"]))
 
-        let childFetch = NSFetchRequest<NSManagedObject>(entityName: "Child")
-        let children = try stack.context2.fetch(childFetch)
-        let childNames = Set(children.compactMap { $0.value(forKey: "name") as? String })
+        let childNames = Set(stack.fetchChildren(in: stack.context2).compactMap { $0.value(forKey: "name") as? String })
         #expect(childNames == Set(["bob", "tom"]))
     }
 
@@ -103,25 +89,19 @@ struct TwoWaySyncTests {
 
         try await stack.attachStores()
 
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
         let date = Date(timeIntervalSinceReferenceDate: 10.0)
-        parent1.setValue("bob", forKey: "name")
+        let parent1 = stack.insertParent(name: "bob", in: stack.context1)
         parent1.setValue(date, forKey: "date")
         stack.save(stack.context1)
 
-        let parent2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context2)
-        parent2.setValue("bob", forKey: "name")
+        let parent2 = stack.insertParent(name: "bob", in: stack.context2)
         parent2.setValue(date, forKey: "date")
         stack.save(stack.context2)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents2 = try stack.context2.fetch(fetch)
-        #expect(parents2.count == 1)
-
-        let parents1 = try stack.context1.fetch(fetch)
-        #expect(parents1.count == 1)
+        #expect(stack.fetchParents(in: stack.context2).count == 1)
+        #expect(stack.fetchParents(in: stack.context1).count == 1)
     }
 
     @Test("Multiple changes sharing single data file")
@@ -129,13 +109,11 @@ struct TwoWaySyncTests {
         try await stack.attachStores()
 
         let data = Data(count: 10001)
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent1.setValue("1", forKey: "name")
+        let parent1 = stack.insertParent(name: "1", in: stack.context1)
         parent1.setValue(data, forKey: "data")
         stack.save(stack.context1)
 
-        let parent2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context2)
-        parent2.setValue("2", forKey: "name")
+        let parent2 = stack.insertParent(name: "2", in: stack.context2)
         parent2.setValue(data, forKey: "data")
         stack.save(stack.context2)
 
@@ -146,8 +124,7 @@ struct TwoWaySyncTests {
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = try stack.context1.fetch(fetch)
+        let parents = stack.fetchParents(in: stack.context1)
         #expect(parents.count == 1)
         let resultParent = parents.last!
         #expect(resultParent.value(forKey: "data") as? Data == data)
@@ -158,19 +135,16 @@ struct TwoWaySyncTests {
     func updateToOneRelationship() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let childOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let childOnDevice1 = stack.insertChild(in: stack.context1)
         childOnDevice1.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let childFetch = NSFetchRequest<NSManagedObject>(entityName: "Child")
-        let children = try stack.context2.fetch(childFetch)
-        let childOnDevice2 = children.last!
+        let childOnDevice2 = stack.fetchChildren(in: stack.context2).last!
 
-        let newParent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context2)
-        newParent.setValue("newdad", forKey: "name")
+        let newParent = stack.insertParent(name: "newdad", in: stack.context2)
         childOnDevice2.setValue(newParent, forKey: "parent")
         stack.save(stack.context2)
 
@@ -186,20 +160,16 @@ struct TwoWaySyncTests {
     func updateToManyRelationship() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child1.setValue("child1", forKey: "name")
+        let parent = stack.insertParent(in: stack.context1)
+        let child1 = stack.insertChild(name: "child1", in: stack.context1)
         child1.setValue(parent, forKey: "parentWithSiblings")
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child2.setValue("child2", forKey: "name")
+        let child2 = stack.insertChild(name: "child2", in: stack.context1)
         child2.setValue(parent, forKey: "parentWithSiblings")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let childFetch = NSFetchRequest<NSManagedObject>(entityName: "Child")
-        let children = try stack.context2.fetch(childFetch)
-        let child1OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "child1" }!
+        let child1OnDevice2 = stack.fetchChild(named: "child1", in: stack.context2)!
         stack.context2.delete(child1OnDevice2)
         stack.save(stack.context2)
 
@@ -214,21 +184,16 @@ struct TwoWaySyncTests {
     func updateOrderedRelationship() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        let child3 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child1.setValue("child1", forKey: "name")
-        child2.setValue("child2", forKey: "name")
-        child3.setValue("child3", forKey: "name")
+        let parent = stack.insertParent(in: stack.context1)
+        let child1 = stack.insertChild(name: "child1", in: stack.context1)
+        let child2 = stack.insertChild(name: "child2", in: stack.context1)
+        let child3 = stack.insertChild(name: "child3", in: stack.context1)
         parent.setValue(NSOrderedSet(array: [child1, child2, child3]), forKey: "orderedChildren")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = try stack.context2.fetch(fetch)
-        let parentOnDevice2 = parents.last!
+        let parentOnDevice2 = stack.fetchParents(in: stack.context2).last!
         let childrenOnDevice2 = (parentOnDevice2.value(forKey: "orderedChildren") as! NSOrderedSet).mutableCopy() as! NSMutableOrderedSet
         #expect(childrenOnDevice2.count == 3)
 
@@ -250,20 +215,15 @@ struct TwoWaySyncTests {
     func selfReferentialRelationships() async throws {
         try await stack.attachStores()
 
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent1.setValue("item1", forKey: "name")
-        let parent2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent2.setValue("item2", forKey: "name")
-        let parent3 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent3.setValue("item3", forKey: "name")
+        let parent1 = stack.insertParent(name: "item1", in: stack.context1)
+        let parent2 = stack.insertParent(name: "item2", in: stack.context1)
+        let parent3 = stack.insertParent(name: "item3", in: stack.context1)
         parent1.setValue(NSSet(array: [parent2, parent3]), forKey: "relatedParents")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = try stack.context2.fetch(fetch)
-        let parent1OnDevice2 = parents.first { ($0.value(forKey: "name") as? String) == "item1" }!
+        let parent1OnDevice2 = stack.fetchParent(named: "item1", in: stack.context2)!
         #expect((parent1OnDevice2.value(forKey: "relatedParents") as? NSSet)?.count == 2)
     }
 
@@ -271,20 +231,16 @@ struct TwoWaySyncTests {
     func inheritedOneToManyRelationshipsBetweenSubentities() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
-        parent.setValue("item1", forKey: "name")
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child1.setValue("item1", forKey: "name")
+        let parent = stack.insertObject(entity: "DerivedParent", name: "item1", in: stack.context1)
+        let child1 = stack.insertObject(entity: "DerivedChild", name: "item1", in: stack.context1)
         child1.setValue(parent, forKey: "parentWithSiblings")
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child2.setValue("item2", forKey: "name")
+        let child2 = stack.insertObject(entity: "DerivedChild", name: "item2", in: stack.context1)
         child2.setValue(parent, forKey: "parentWithSiblings")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "DerivedChild")
-        let children = try stack.context2.fetch(fetch)
+        let children = stack.fetchObjects(entity: "DerivedChild", in: stack.context2)
         let child1OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "item1" }!
         stack.context2.delete(child1OnDevice2)
         stack.save(stack.context2)
@@ -300,17 +256,14 @@ struct TwoWaySyncTests {
     func inheritedOneToOneRelationshipsBetweenSubentities() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
-        parent.setValue("item", forKey: "name")
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child1.setValue("item", forKey: "name")
+        let parent = stack.insertObject(entity: "DerivedParent", name: "item", in: stack.context1)
+        let child1 = stack.insertObject(entity: "DerivedChild", name: "item", in: stack.context1)
         child1.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "DerivedChild")
-        let children = try stack.context2.fetch(fetch)
+        let children = stack.fetchObjects(entity: "DerivedChild", in: stack.context2)
         let child1OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "item" }!
         #expect(child1OnDevice2.value(forKey: "parent") != nil)
     }
@@ -319,20 +272,16 @@ struct TwoWaySyncTests {
     func uninheritedRelationshipsBetweenSubentities() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
-        parent.setValue("item1", forKey: "name")
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child1.setValue("item1", forKey: "name")
+        let parent = stack.insertObject(entity: "DerivedParent", name: "item1", in: stack.context1)
+        let child1 = stack.insertObject(entity: "DerivedChild", name: "item1", in: stack.context1)
         child1.setValue(parent, forKey: "derivedParent")
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child2.setValue("item2", forKey: "name")
+        let child2 = stack.insertObject(entity: "DerivedChild", name: "item2", in: stack.context1)
         child2.setValue(parent, forKey: "derivedParent")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "DerivedChild")
-        let children = try stack.context2.fetch(fetch)
+        let children = stack.fetchObjects(entity: "DerivedChild", in: stack.context2)
         let child1OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "item1" }!
         stack.context2.delete(child1OnDevice2)
         stack.save(stack.context2)
@@ -348,32 +297,23 @@ struct TwoWaySyncTests {
     func relationshipsMixingEntities() async throws {
         try await stack.attachStores()
 
-        let derivedParent = NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
-        derivedParent.setValue("dp1", forKey: "name")
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("p2", forKey: "name")
+        let derivedParent = stack.insertObject(entity: "DerivedParent", name: "dp1", in: stack.context1)
+        let parent = stack.insertParent(name: "p2", in: stack.context1)
 
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
-        child1.setValue("dc1", forKey: "name")
+        let child1 = stack.insertObject(entity: "DerivedChild", name: "dc1", in: stack.context1)
         child1.setValue(parent, forKey: "parent")
         child1.setValue(derivedParent, forKey: "parentWithSiblings")
 
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        child2.setValue("c2", forKey: "name")
+        let child2 = stack.insertChild(name: "c2", in: stack.context1)
         child2.setValue(derivedParent, forKey: "parentWithSiblings")
         stack.save(stack.context1)
 
         try await stack.syncChanges()
 
-        let childFetch = NSFetchRequest<NSManagedObject>(entityName: "Child")
-        let children = try stack.context2.fetch(childFetch)
-        let child1OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "dc1" }!
-        let child2OnDevice2 = children.first { ($0.value(forKey: "name") as? String) == "c2" }!
-
-        let parentFetch = NSFetchRequest<NSManagedObject>(entityName: "Parent")
-        let parents = try stack.context2.fetch(parentFetch)
-        let derivedParentOnDevice2 = parents.first { ($0.value(forKey: "name") as? String) == "dp1" }!
-        let parentOnDevice2 = parents.first { ($0.value(forKey: "name") as? String) == "p2" }!
+        let child1OnDevice2 = stack.fetchChild(named: "dc1", in: stack.context2)!
+        let child2OnDevice2 = stack.fetchChild(named: "c2", in: stack.context2)!
+        let derivedParentOnDevice2 = stack.fetchParent(named: "dp1", in: stack.context2)!
+        let parentOnDevice2 = stack.fetchParent(named: "p2", in: stack.context2)!
 
         #expect((child1OnDevice2.value(forKey: "parent") as? NSManagedObject) == parentOnDevice2)
         #expect((child1OnDevice2.value(forKey: "parentWithSiblings") as? NSManagedObject) == derivedParentOnDevice2)
@@ -382,9 +322,9 @@ struct TwoWaySyncTests {
 
     @Test("Attaching with no import of local data")
     func attachingWithNoImportOfLocalData() async throws {
-        NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
+        stack.insertObject(entity: "DerivedParent", in: stack.context1)
         stack.save(stack.context1)
-        NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context2)
+        stack.insertObject(entity: "DerivedParent", in: stack.context2)
         stack.save(stack.context2)
 
         try await stack.ensemble1.attachPersistentStore()
@@ -392,25 +332,19 @@ struct TwoWaySyncTests {
 
         try await stack.syncChanges()
 
-        let fetch = NSFetchRequest<NSManagedObject>(entityName: "DerivedParent")
-        var parents = try stack.context2.fetch(fetch)
-        #expect(parents.count == 1)
-
-        parents = try stack.context1.fetch(fetch)
-        #expect(parents.count == 1)
+        #expect(stack.fetchObjects(entity: "DerivedParent", in: stack.context2).count == 1)
+        #expect(stack.fetchObjects(entity: "DerivedParent", in: stack.context1).count == 1)
 
         // Add more objects
-        NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
+        stack.insertObject(entity: "DerivedParent", in: stack.context1)
         stack.save(stack.context1)
-        NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context2)
+        stack.insertObject(entity: "DerivedParent", in: stack.context2)
         stack.save(stack.context2)
 
         try await stack.syncChanges()
 
-        parents = try stack.context2.fetch(fetch)
-        #expect(parents.count == 3)
-        parents = try stack.context1.fetch(fetch)
-        #expect(parents.count == 3)
+        #expect(stack.fetchObjects(entity: "DerivedParent", in: stack.context2).count == 3)
+        #expect(stack.fetchObjects(entity: "DerivedParent", in: stack.context1).count == 3)
     }
 
     @Test("Leaving behind devices in a rebase")
@@ -418,8 +352,7 @@ struct TwoWaySyncTests {
         try await stack.attachStores()
         try await stack.syncChangesAndSuppressRebase()
 
-        let parentOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parentOnDevice1.setValue("bob", forKey: "name")
+        stack.insertParent(name: "bob", in: stack.context1)
         stack.save(stack.context1)
         try await stack.syncChanges()
 
@@ -430,8 +363,7 @@ struct TwoWaySyncTests {
         try await stack.syncEnsembleAndSuppressRebase(stack.ensemble2)
 
         // Add object to left-behind device
-        let parentOnDevice2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context2)
-        parentOnDevice2.setValue("fred", forKey: "name")
+        stack.insertParent(name: "fred", in: stack.context2)
         stack.save(stack.context2)
 
         try await stack.syncEnsembleAndSuppressRebase(stack.ensemble2)
@@ -447,12 +379,9 @@ struct TwoWaySyncTests {
         try await stack.attachStores()
         try await stack.syncChangesAndSuppressRebase()
 
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent1.setValue("1", forKey: "name")
-        let parent3 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent3.setValue("3", forKey: "name")
-        let parent4 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent4.setValue("4", forKey: "name")
+        let parent1 = stack.insertParent(name: "1", in: stack.context1)
+        let parent3 = stack.insertParent(name: "3", in: stack.context1)
+        let parent4 = stack.insertParent(name: "4", in: stack.context1)
         stack.save(stack.context1)
         try await stack.syncEnsembleAndSuppressRebase(stack.ensemble1)
 
@@ -481,12 +410,9 @@ struct TwoWaySyncTests {
         try await stack.attachStores()
         try await stack.syncChangesAndSuppressRebase()
 
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent1.setValue("1", forKey: "name")
-        let parent3 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent3.setValue("3", forKey: "name")
-        let parent4 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent4.setValue("4", forKey: "name")
+        let parent1 = stack.insertParent(name: "1", in: stack.context1)
+        let parent3 = stack.insertParent(name: "3", in: stack.context1)
+        let parent4 = stack.insertParent(name: "4", in: stack.context1)
         stack.save(stack.context1)
 
         // Relate

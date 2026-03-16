@@ -11,7 +11,7 @@ struct IntegratorMergeRepairTests {
     init() throws {
         let s = try IntegratorTestStack()
         s.integrator.performIntegrabilityChecks = false
-        s.addEventsFromJSONFile("IntegratorMergeTestsFixture")
+        try s.addEventsFromJSONFile("IntegratorMergeTestsFixture")
 
         // Set up a failedSaveBlock that fixes the validation error
         s.integrator.failedSaveBlock = { context, error, reparationContext in
@@ -69,23 +69,21 @@ struct IntegratorMergeRepairTests {
     func mergeEventIncludesObjectChanges() async throws {
         try await stack.mergeEvents()
 
-        stack.eventMOC.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            fetch.predicate = NSPredicate(format: "type = %d AND eventRevision.persistentStoreIdentifier = %@",
-                                          StoreModificationEventType.merge.rawValue,
-                                          stack.setup.persistentStoreIdentifier)
-            let events = (try? stack.eventMOC.fetch(fetch)) ?? []
-            let mergeEvent = events.last
-            #expect(mergeEvent != nil)
-            #expect(mergeEvent?.objectChanges.count == 1)
+        let mergeEvents = try stack.eventStore.fetchEvents(types: [.merge], persistentStoreIdentifier: stack.setup.persistentStoreIdentifier)
+        let mergeEvent = mergeEvents.last
+        #expect(mergeEvent != nil)
 
-            let objectChange = mergeEvent?.objectChanges.first
-            let propertyChanges = objectChange?.propertyChangeValues as? [PropertyChangeValue] ?? []
+        if let mergeEvent {
+            let objectChanges = try stack.eventStore.fetchObjectChanges(eventId: mergeEvent.id)
+            #expect(objectChanges.count == 1)
+
+            let objectChange = objectChanges.first
+            let propertyChanges = objectChange?.propertyChangeValues ?? []
             #expect(propertyChanges.count == 1)
 
             let propertyChange = propertyChanges.last
             #expect(propertyChange?.propertyName == "invalidatingAttribute")
-            #expect(propertyChange?.value as? NSNumber == NSNumber(value: 0))
+            #expect(propertyChange?.value == StoredValue.int(0))
         }
     }
 
@@ -136,20 +134,16 @@ struct IntegratorMergeRepairTests {
 
         try await stack.mergeEvents()
 
-        stack.eventMOC.performAndWait {
-            let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-            fetch.predicate = NSPredicate(format: "type = %d AND eventRevision.persistentStoreIdentifier = %@",
-                                          StoreModificationEventType.merge.rawValue,
-                                          stack.setup.persistentStoreIdentifier)
-            let events = (try? stack.eventMOC.fetch(fetch)) ?? []
-            let mergeEvent = events.last
+        let mergeEvents = try stack.eventStore.fetchEvents(types: [.merge], persistentStoreIdentifier: stack.setup.persistentStoreIdentifier)
+        let mergeEvent = mergeEvents.last
 
-            let objectChanges = mergeEvent?.objectChanges ?? []
+        if let mergeEvent {
+            let objectChanges = try stack.eventStore.fetchObjectChanges(eventId: mergeEvent.id)
             #expect(objectChanges.count == 2)
 
             let childChanges = objectChanges.filter { $0.nameOfEntity == "Child" }
             #expect(childChanges.count == 1)
-            #expect(childChanges.first?.objectChangeType == .insert)
+            #expect(childChanges.first?.type == .insert)
         }
     }
 }

@@ -11,7 +11,7 @@ struct IntegratorRelationshipTests {
     init() async throws {
         let s = try IntegratorTestStack()
         s.integrator.performIntegrabilityChecks = false
-        s.addEventsFromJSONFile("BasicIntegratorRelationshipTestsFixture")
+        try s.addEventsFromJSONFile("BasicIntegratorRelationshipTestsFixture")
         try await s.mergeEvents()
         stack = s
     }

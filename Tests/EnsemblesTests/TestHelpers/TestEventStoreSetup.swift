@@ -8,7 +8,6 @@ final class TestEventStoreSetup: @unchecked Sendable {
     let eventStore: EventStore
     let tempDirectory: String
 
-    var context: NSManagedObjectContext { eventStore.managedObjectContext! }
     var persistentStoreIdentifier: String { eventStore.persistentStoreIdentifier! }
 
     /// The test app model (CDEStoreModificationEventTestsModel) and context.
@@ -60,36 +59,33 @@ final class TestEventStoreSetup: @unchecked Sendable {
         try? FileManager.default.removeItem(atPath: tempDirectory)
     }
 
-    // MARK: - Event Store MOC Helpers
+    // MARK: - Event Store Helpers
 
-    func addEventRevision(store: String, revision: RevisionNumber) -> EventRevision {
-        EventRevision.makeEventRevision(forPersistentStoreIdentifier: store, revisionNumber: revision, in: context)
+    @discardableResult
+    func addEventRevision(store: String, revision: RevisionNumber, eventId: Int64) throws -> EventRevision {
+        try eventStore.insertRevision(persistentStoreIdentifier: store, revisionNumber: revision, eventId: eventId, isEventRevision: false)
     }
 
-    func addModEvent(store: String, revision: RevisionNumber, globalCount: GlobalCount = 0, timestamp: TimeInterval = 0) -> StoreModificationEvent {
-        let event = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: context) as! StoreModificationEvent
-        event.storeModificationEventType = .save
-        event.timestamp = timestamp
-        event.globalCount = globalCount
-        event.eventRevision = addEventRevision(store: store, revision: revision)
+    @discardableResult
+    func addModEvent(store: String, revision: RevisionNumber, globalCount: GlobalCount = 0, timestamp: TimeInterval = 0) throws -> StoreModificationEvent {
+        let event = try eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .save,
+            timestamp: timestamp,
+            globalCount: globalCount
+        )
+        try eventStore.insertRevision(persistentStoreIdentifier: store, revisionNumber: revision, eventId: event.id, isEventRevision: true)
         return event
     }
 
-    func addGlobalIdentifier(_ identifier: String, entity: String) -> GlobalIdentifier {
-        let gid = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: context) as! GlobalIdentifier
-        gid.globalIdentifier = identifier
-        gid.nameOfEntity = entity
-        gid.storeURI = nil
-        return gid
+    @discardableResult
+    func addGlobalIdentifier(_ identifier: String, entity: String) throws -> GlobalIdentifier {
+        try eventStore.insertGlobalIdentifier(globalIdentifier: identifier, nameOfEntity: entity, storeURI: nil)
     }
 
-    func addObjectChange(type: ObjectChangeType, globalIdentifier: GlobalIdentifier, event: StoreModificationEvent) -> ObjectChange {
-        let change = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: context) as! ObjectChange
-        change.nameOfEntity = globalIdentifier.nameOfEntity
-        change.objectChangeType = type
-        change.storeModificationEvent = event
-        change.globalIdentifier = globalIdentifier
-        return change
+    @discardableResult
+    func addObjectChange(type: ObjectChangeType, globalIdentifier: GlobalIdentifier, event: StoreModificationEvent, propertyChanges: [StoredPropertyChange]? = nil) throws -> ObjectChange {
+        try eventStore.insertObjectChange(type: type, nameOfEntity: globalIdentifier.nameOfEntity, eventId: event.id, globalIdentifierId: globalIdentifier.id, propertyChanges: propertyChanges)
     }
 
     // MARK: - Property Change Value Helpers
@@ -116,87 +112,65 @@ final class TestEventStoreSetup: @unchecked Sendable {
     // MARK: - Baseline Helpers
 
     @discardableResult
-    func addBaselineEvents(storeId: String, globalCounts: [GlobalCount], revisions: [RevisionNumber]) -> [StoreModificationEvent] {
-        nonisolated(unsafe) var baselines: [StoreModificationEvent] = []
-        context.performAndWait {
-            for i in 0..<globalCounts.count {
-                let event = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: context) as! StoreModificationEvent
-                event.storeModificationEventType = .baseline
-                event.globalCount = globalCounts[i]
-                event.timestamp = 10.0
-                event.modelVersion = "DEFAULT"
-                let rev = EventRevision.makeEventRevision(forPersistentStoreIdentifier: storeId, revisionNumber: revisions[i], in: context)
-                event.eventRevision = rev
-                baselines.append(event)
-            }
-            try? context.save()
+    func addBaselineEvents(storeId: String, globalCounts: [GlobalCount], revisions: [RevisionNumber]) throws -> [StoreModificationEvent] {
+        var baselines: [StoreModificationEvent] = []
+        for i in 0..<globalCounts.count {
+            let event = try eventStore.insertEvent(
+                uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+                type: .baseline,
+                timestamp: 10.0,
+                globalCount: globalCounts[i],
+                modelVersion: "DEFAULT"
+            )
+            try eventStore.insertRevision(persistentStoreIdentifier: storeId, revisionNumber: revisions[i], eventId: event.id, isEventRevision: true)
+            baselines.append(event)
         }
         return baselines
     }
 
     @discardableResult
-    func addEvents(type: StoreModificationEventType, storeId: String, globalCounts: [GlobalCount], revisions: [RevisionNumber]) -> [StoreModificationEvent] {
-        nonisolated(unsafe) var events: [StoreModificationEvent] = []
-        context.performAndWait {
-            for i in 0..<globalCounts.count {
-                let event = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: context) as! StoreModificationEvent
-                event.storeModificationEventType = type
-                event.globalCount = globalCounts[i]
-                event.timestamp = 10.0
-                let rev = EventRevision.makeEventRevision(forPersistentStoreIdentifier: storeId, revisionNumber: revisions[i], in: context)
-                event.eventRevision = rev
-                events.append(event)
-            }
-            try? context.save()
+    func addEvents(type: StoreModificationEventType, storeId: String, globalCounts: [GlobalCount], revisions: [RevisionNumber]) throws -> [StoreModificationEvent] {
+        var events: [StoreModificationEvent] = []
+        for i in 0..<globalCounts.count {
+            let event = try eventStore.insertEvent(
+                uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+                type: type,
+                timestamp: 10.0,
+                globalCount: globalCounts[i]
+            )
+            try eventStore.insertRevision(persistentStoreIdentifier: storeId, revisionNumber: revisions[i], eventId: event.id, isEventRevision: true)
+            events.append(event)
         }
         return events
     }
 
-    func objectChange(globalId: GlobalIdentifier, valuesByKey: [String: Any]) -> ObjectChange {
-        let change = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: context) as! ObjectChange
-        change.objectChangeType = .insert
-        change.globalIdentifier = globalId
-        change.nameOfEntity = globalId.nameOfEntity
-
-        var values: [PropertyChangeValue] = []
+    @discardableResult
+    func objectChange(globalId: GlobalIdentifier, valuesByKey: [String: Any], event: StoreModificationEvent) throws -> ObjectChange {
+        var storedChanges: [StoredPropertyChange] = []
         for (key, obj) in valuesByKey {
             let pcv = PropertyChangeValue(type: .attribute, propertyName: key)
             pcv.value = obj as? NSObject
-            values.append(pcv)
+            storedChanges.append(pcv.toStoredPropertyChange())
         }
-        change.propertyChangeValues = values as NSArray
-        return change
+        return try eventStore.insertObjectChange(type: .insert, nameOfEntity: globalId.nameOfEntity, eventId: event.id, globalIdentifierId: globalId.id, propertyChanges: storedChanges)
     }
 
-    func fetchStoreModEvents() -> [StoreModificationEvent] {
-        let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-        return (try? context.fetch(fetch)) ?? []
+    func fetchStoreModEvents() throws -> [StoreModificationEvent] {
+        try eventStore.fetchCompleteEvents()
     }
 
-    func fetchBaseline() -> StoreModificationEvent? {
-        let fetch = NSFetchRequest<StoreModificationEvent>(entityName: "CDEStoreModificationEvent")
-        fetch.predicate = NSPredicate(format: "type = %d", StoreModificationEventType.baseline.rawValue)
-        return (try? context.fetch(fetch))?.last
+    func fetchBaseline() throws -> StoreModificationEvent? {
+        try eventStore.fetchBaselineEvent()
     }
 
-    func addMissingFile(to event: StoreModificationEvent) {
-        let globalId = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: context) as! GlobalIdentifier
-        globalId.globalIdentifier = "123"
-        globalId.nameOfEntity = "Parent"
-
-        let objChange = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: context) as! ObjectChange
-        objChange.storeModificationEvent = event
-        objChange.objectChangeType = .insert
-        objChange.nameOfEntity = "Parent"
-        objChange.globalIdentifier = globalId
-
-        let dataFile = NSEntityDescription.insertNewObject(forEntityName: "CDEDataFile", into: context) as! DataFile
-        dataFile.objectChange = objChange
-        dataFile.filename = "filename"
+    func addMissingFile(to event: StoreModificationEvent) throws {
+        let globalId = try eventStore.insertGlobalIdentifier(globalIdentifier: "123", nameOfEntity: "Parent")
+        let objChange = try eventStore.insertObjectChange(type: .insert, nameOfEntity: "Parent", eventId: event.id, globalIdentifierId: globalId.id)
+        try eventStore.insertDataFile(filename: "filename", objectChangeId: objChange.id)
     }
 
-    func addRevisionOfOtherStoreToBaseline(_ storeId: String) {
-        let baseline = try! StoreModificationEvent.fetchBaselineEvent(in: context)!
-        baseline.eventRevisionsOfOtherStores = Set([addEventRevision(store: storeId, revision: 0)])
+    func addRevisionOfOtherStoreToBaseline(_ storeId: String) throws {
+        let baseline = try eventStore.fetchBaselineEvent()!
+        try eventStore.insertRevision(persistentStoreIdentifier: storeId, revisionNumber: 0, eventId: baseline.id, isEventRevision: false)
     }
 }

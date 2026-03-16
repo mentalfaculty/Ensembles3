@@ -26,13 +26,11 @@ struct RandomSyncTests {
             let randBool2 = Bool.random()
             switch r1 {
             case 0:
-                let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-                parent.setValue(UUID().uuidString, forKey: "name")
+                let parent = stack.insertParent(name: UUID().uuidString, in: stack.context1)
                 if randBool2 { parent.setValue(data, forKey: "data") }
                 if randBool1 { stack.save(stack.context1) }
             case 1:
-                let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context2)
-                parent.setValue(UUID().uuidString, forKey: "name")
+                let parent = stack.insertParent(name: UUID().uuidString, in: stack.context2)
                 if randBool2 { parent.setValue(data, forKey: "data") }
                 if randBool1 { stack.save(stack.context2) }
             case 2:

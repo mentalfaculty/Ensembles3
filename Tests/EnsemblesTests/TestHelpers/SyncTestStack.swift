@@ -218,6 +218,35 @@ final class SyncTestStack: NSObject, CoreDataEnsembleDelegate, @unchecked Sendab
         }
     }
 
+    // MARK: - Insert Helpers
+
+    @discardableResult
+    func insertParent(name: String? = nil, in context: NSManagedObjectContext) -> NSManagedObject {
+        insertObject(entity: "Parent", name: name, in: context)
+    }
+
+    @discardableResult
+    func insertChild(name: String? = nil, in context: NSManagedObjectContext) -> NSManagedObject {
+        insertObject(entity: "Child", name: name, in: context)
+    }
+
+    @discardableResult
+    func insertObject(entity: String, name: String? = nil, in context: NSManagedObjectContext) -> NSManagedObject {
+        let obj = NSEntityDescription.insertNewObject(forEntityName: entity, into: context)
+        if let name { obj.setValue(name, forKey: "name") }
+        return obj
+    }
+
+    // MARK: - Fetch-by-Name Helpers
+
+    func fetchParent(named name: String, in context: NSManagedObjectContext) -> NSManagedObject? {
+        fetchParents(in: context).first { ($0.value(forKey: "name") as? String) == name }
+    }
+
+    func fetchChild(named name: String, in context: NSManagedObjectContext) -> NSManagedObject? {
+        fetchChildren(in: context).first { ($0.value(forKey: "name") as? String) == name }
+    }
+
     // MARK: - File System Helpers
 
     func cloudBaselinesDir() -> String {

@@ -8,7 +8,7 @@ final class IntegratorTestStack: @unchecked Sendable {
     let setup: TestEventStoreSetup
     let integrator: EventIntegrator
     let testMOC: NSManagedObjectContext
-    let eventMOC: NSManagedObjectContext
+    let eventStore: EventStore
     let testModel: NSManagedObjectModel
 
     let ensemble: TestEnsemble
@@ -36,7 +36,7 @@ final class IntegratorTestStack: @unchecked Sendable {
         integrator = integr
         ensemble = ens
         testMOC = s.testManagedObjectContext!
-        eventMOC = s.context
+        eventStore = s.eventStore
         testModel = model
     }
 
@@ -48,7 +48,7 @@ final class IntegratorTestStack: @unchecked Sendable {
 
     // MARK: - JSON Fixture Loading
 
-    func addEventsFromJSONFile(_ filename: String, subdirectory: String? = nil) {
+    func addEventsFromJSONFile(_ filename: String, subdirectory: String? = nil) throws {
         let url: URL?
         if let subdirectory {
             url = Bundle.module.url(forResource: filename, withExtension: "json", subdirectory: "Integrator Test Fixtures/\(subdirectory)")
@@ -62,93 +62,92 @@ final class IntegratorTestStack: @unchecked Sendable {
             preconditionFailure("Could not parse JSON fixture: \(filename)")
         }
 
-        eventMOC.performAndWait {
-            var globalIds: [String: GlobalIdentifier] = [:]
+        var globalIds: [String: GlobalIdentifier] = [:]
 
-            for eventDict in eventDicts {
-                let store = eventDict["store"] as? String ?? ""
-                let revision = (eventDict["revision"] as? NSNumber)?.int64Value ?? 0
-                let globalCount = (eventDict["globalCount"] as? NSNumber)?.int64Value ?? 0
-                let timestamp = (eventDict["timestamp"] as? NSNumber)?.doubleValue ?? 0
+        for eventDict in eventDicts {
+            let store = eventDict["store"] as? String ?? ""
+            let revision = (eventDict["revision"] as? NSNumber)?.int64Value ?? 0
+            let globalCount = (eventDict["globalCount"] as? NSNumber)?.int64Value ?? 0
+            let timestamp = (eventDict["timestamp"] as? NSNumber)?.doubleValue ?? 0
 
-                let modEvent = setup.addModEvent(store: store, revision: revision, globalCount: globalCount, timestamp: timestamp)
+            let modEvent = try setup.addModEvent(store: store, revision: revision, globalCount: globalCount, timestamp: timestamp)
 
-                // Other stores' revisions
-                if let otherStores = eventDict["otherstores"] as? [[String: Any]] {
-                    var otherRevs = Set<EventRevision>()
-                    for revDict in otherStores {
-                        let otherStore = revDict["store"] as? String ?? ""
-                        let otherRev = (revDict["revision"] as? NSNumber)?.int64Value ?? 0
-                        otherRevs.insert(setup.addEventRevision(store: otherStore, revision: otherRev))
-                    }
-                    modEvent.eventRevisionsOfOtherStores = otherRevs
-                }
-
-                // Changes
-                if let changes = eventDict["changes"] as? [[String: Any]] {
-                    for changeDict in changes {
-                        let typeString = changeDict["type"] as? String ?? ""
-                        let changeType: ObjectChangeType
-                        switch typeString {
-                        case "insert": changeType = .insert
-                        case "update": changeType = .update
-                        case "delete": changeType = .delete
-                        default: continue
-                        }
-
-                        let entityName = changeDict["entity"] as? String ?? ""
-                        let idString = changeDict["id"] as? String ?? ""
-
-                        // Reuse existing global identifiers
-                        let key = "\(entityName):\(idString)"
-                        let globalId: GlobalIdentifier
-                        if let existing = globalIds[key] {
-                            globalId = existing
-                        } else {
-                            globalId = setup.addGlobalIdentifier(idString, entity: entityName)
-                            globalIds[key] = globalId
-                        }
-
-                        let change = setup.addObjectChange(type: changeType, globalIdentifier: globalId, event: modEvent)
-
-                        // Properties
-                        if let properties = changeDict["properties"] as? [String: Any] {
-                            let entity = testModel.entitiesByName[entityName]
-                            var propertyChangeValues: [PropertyChangeValue] = []
-
-                            for (propName, propValue) in properties {
-                                let property = entity?.propertiesByName[propName]
-
-                                if property is NSRelationshipDescription {
-                                    let rel = property as! NSRelationshipDescription
-                                    if rel.isToMany {
-                                        if let dict = propValue as? [String: [String]] {
-                                            let added = dict["add"] ?? []
-                                            let removed = dict["remove"] ?? []
-                                            propertyChangeValues.append(setup.toManyRelationshipChange(name: propName, added: added, removed: removed))
-                                        }
-                                    } else {
-                                        let identifier = (propValue is NSNull) ? nil : propValue
-                                        propertyChangeValues.append(setup.toOneRelationshipChange(name: propName, relatedIdentifier: identifier))
-                                    }
-                                } else {
-                                    var value: Any? = propValue
-                                    if propValue is NSNull { value = nil }
-
-                                    // Date conversion: JSON stores as timeIntervalSinceReferenceDate
-                                    if let attrDesc = property as? NSAttributeDescription, attrDesc.attributeType == .dateAttributeType, let num = value as? NSNumber {
-                                        value = NSDate(timeIntervalSinceReferenceDate: num.doubleValue)
-                                    }
-
-                                    propertyChangeValues.append(setup.attributeChange(name: propName, value: value))
-                                }
-                            }
-                            change.propertyChangeValues = propertyChangeValues as NSArray
-                        }
-                    }
+            // Other stores' revisions
+            if let otherStores = eventDict["otherstores"] as? [[String: Any]] {
+                for revDict in otherStores {
+                    let otherStore = revDict["store"] as? String ?? ""
+                    let otherRev = (revDict["revision"] as? NSNumber)?.int64Value ?? 0
+                    try eventStore.insertRevision(persistentStoreIdentifier: otherStore, revisionNumber: otherRev, eventId: modEvent.id, isEventRevision: false)
                 }
             }
-            try? eventMOC.save()
+
+            // Changes
+            if let changes = eventDict["changes"] as? [[String: Any]] {
+                for changeDict in changes {
+                    let typeString = changeDict["type"] as? String ?? ""
+                    let changeType: ObjectChangeType
+                    switch typeString {
+                    case "insert": changeType = .insert
+                    case "update": changeType = .update
+                    case "delete": changeType = .delete
+                    default: continue
+                    }
+
+                    let entityName = changeDict["entity"] as? String ?? ""
+                    let idString = changeDict["id"] as? String ?? ""
+
+                    // Reuse existing global identifiers (from this file or from a previous fixture load)
+                    let key = "\(entityName):\(idString)"
+                    let globalId: GlobalIdentifier
+                    if let existing = globalIds[key] {
+                        globalId = existing
+                    } else if let existing = try eventStore.fetchGlobalIdentifiers(forIdentifierStrings: [idString], withEntityName: entityName).first.flatMap({ $0 }) {
+                        globalId = existing
+                        globalIds[key] = globalId
+                    } else {
+                        globalId = try setup.addGlobalIdentifier(idString, entity: entityName)
+                        globalIds[key] = globalId
+                    }
+
+                    // Properties
+                    var storedChanges: [StoredPropertyChange]? = nil
+                    if let properties = changeDict["properties"] as? [String: Any] {
+                        let entity = testModel.entitiesByName[entityName]
+                        var propertyChangeValues: [PropertyChangeValue] = []
+
+                        for (propName, propValue) in properties {
+                            let property = entity?.propertiesByName[propName]
+
+                            if property is NSRelationshipDescription {
+                                let rel = property as! NSRelationshipDescription
+                                if rel.isToMany {
+                                    if let dict = propValue as? [String: [String]] {
+                                        let added = dict["add"] ?? []
+                                        let removed = dict["remove"] ?? []
+                                        propertyChangeValues.append(setup.toManyRelationshipChange(name: propName, added: added, removed: removed))
+                                    }
+                                } else {
+                                    let identifier = (propValue is NSNull) ? nil : propValue
+                                    propertyChangeValues.append(setup.toOneRelationshipChange(name: propName, relatedIdentifier: identifier))
+                                }
+                            } else {
+                                var value: Any? = propValue
+                                if propValue is NSNull { value = nil }
+
+                                // Date conversion: JSON stores as timeIntervalSinceReferenceDate
+                                if let attrDesc = property as? NSAttributeDescription, attrDesc.attributeType == .dateAttributeType, let num = value as? NSNumber {
+                                    value = NSDate(timeIntervalSinceReferenceDate: num.doubleValue)
+                                }
+
+                                propertyChangeValues.append(setup.attributeChange(name: propName, value: value))
+                            }
+                        }
+                        storedChanges = propertyChangeValues.map { $0.toStoredPropertyChange() }
+                    }
+
+                    try setup.addObjectChange(type: changeType, globalIdentifier: globalId, event: modEvent, propertyChanges: storedChanges)
+                }
+            }
         }
     }
 
@@ -169,5 +168,13 @@ final class IntegratorTestStack: @unchecked Sendable {
 
     func fetchChildren() -> [NSManagedObject] {
         fetchObjects(entity: "Child")
+    }
+
+    func fetchParent(named name: String) -> NSManagedObject? {
+        fetchParents().first { ($0.value(forKey: "name") as? String) == name }
+    }
+
+    func fetchChild(named name: String) -> NSManagedObject? {
+        fetchChildren().first { ($0.value(forKey: "name") as? String) == name }
     }
 }

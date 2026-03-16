@@ -1,45 +1,36 @@
 import Testing
 import Foundation
-import CoreData
 @_spi(Testing) import Ensembles
 
 @Suite("EventRevision")
 struct EventRevisionTests {
 
-    @Test("Make event revision")
-    func makeEventRevision() throws {
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let rev = EventRevision.makeEventRevision(
-                forPersistentStoreIdentifier: "store1",
-                revisionNumber: 5,
-                in: stack.context
-            )
-            #expect(rev.persistentStoreIdentifier == "store1")
-            #expect(rev.revisionNumber == 5)
-        }
+    @Test("Insert and fetch event revision")
+    func insertAndFetchRevision() throws {
+        let setup = try TestEventStoreSetup()
+        let event = try setup.addModEvent(store: "store1", revision: 5)
+        let rev = try setup.eventStore.fetchEventRevision(eventId: event.id)!
+        #expect(rev.persistentStoreIdentifier == "store1")
+        #expect(rev.revisionNumber == 5)
     }
 
     @Test("Fetch persistent store identifiers")
     func fetchPersistentStoreIdentifiers() throws {
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            _ = EventRevision.makeEventRevision(forPersistentStoreIdentifier: "store1", revisionNumber: 0, in: stack.context)
-            _ = EventRevision.makeEventRevision(forPersistentStoreIdentifier: "store2", revisionNumber: 1, in: stack.context)
-            let ids = try! EventRevision.fetchPersistentStoreIdentifiers(in: stack.context)
-            #expect(ids == Set(["store1", "store2"]))
-        }
+        let setup = try TestEventStoreSetup()
+        try setup.addModEvent(store: "store1", revision: 0)
+        try setup.addModEvent(store: "store2", revision: 1)
+        let ids = try setup.eventStore.fetchPersistentStoreIdentifiers()
+        #expect(ids == Set(["store1", "store2"]))
     }
 
     @Test("Revision value type from EventRevision")
     func revisionValueType() throws {
-        let stack = try EventStoreTestStack()
-        stack.context.performAndWait {
-            let event = stack.addModEvent(store: "store1", revision: 5, globalCount: 10)
-            let rev = event.eventRevision!.revision
-            #expect(rev.persistentStoreIdentifier == "store1")
-            #expect(rev.revisionNumber == 5)
-            #expect(rev.globalCount == 10)
-        }
+        let setup = try TestEventStoreSetup()
+        let event = try setup.addModEvent(store: "store1", revision: 5, globalCount: 10)
+        let rev = try setup.eventStore.fetchEventRevision(eventId: event.id)!
+        let revision = rev.revision(globalCount: event.globalCount)
+        #expect(revision.persistentStoreIdentifier == "store1")
+        #expect(revision.revisionNumber == 5)
+        #expect(revision.globalCount == 10)
     }
 }

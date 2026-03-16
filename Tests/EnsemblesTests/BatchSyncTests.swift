@@ -20,7 +20,7 @@ struct BatchSyncTests {
         try await stack.attachStores()
 
         for _ in 0..<101 {
-            NSEntityDescription.insertNewObject(forEntityName: "BatchParent", into: stack.context1)
+            stack.insertObject(entity: "BatchParent", in: stack.context1)
         }
         stack.save(stack.context1)
 
@@ -35,9 +35,9 @@ struct BatchSyncTests {
         try await stack.attachStores()
 
         for _ in 0..<2 {
-            let parent = NSEntityDescription.insertNewObject(forEntityName: "BatchParent", into: stack.context1)
+            let parent = stack.insertObject(entity: "BatchParent", in: stack.context1)
             for _ in 0..<600 {
-                let child = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
+                let child = stack.insertObject(entity: "BatchChild", in: stack.context1)
                 child.setValue(parent, forKey: "batchParent")
             }
         }
@@ -55,8 +55,8 @@ struct BatchSyncTests {
         try await stack.attachStores()
 
         for _ in 0..<30 {
-            let child1 = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
-            let child2 = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
+            let child1 = stack.insertObject(entity: "BatchChild", in: stack.context1)
+            let child2 = stack.insertObject(entity: "BatchChild", in: stack.context1)
             child1.setValue(child2, forKey: "friend")
             child2.setValue(NSSet(array: [child1, child2]), forKey: "siblings")
         }
@@ -78,12 +78,10 @@ struct BatchSyncTests {
     func threeEntities() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "BatchParent", into: stack.context1)
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
-        child1.setValue("thing1", forKey: "name")
-        child2.setValue("thing2", forKey: "name")
-        let grandparent = NSEntityDescription.insertNewObject(forEntityName: "BatchGrandParent", into: stack.context1)
+        let parent = stack.insertObject(entity: "BatchParent", in: stack.context1)
+        let child1 = stack.insertObject(entity: "BatchChild", name: "thing1", in: stack.context1)
+        let child2 = stack.insertObject(entity: "BatchChild", name: "thing2", in: stack.context1)
+        let grandparent = stack.insertObject(entity: "BatchGrandParent", in: stack.context1)
 
         parent.setValue(NSSet(array: [child1, child2]), forKey: "batchChildren")
         parent.setValue(grandparent, forKey: "batchGrandParent")

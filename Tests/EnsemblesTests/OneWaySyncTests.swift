@@ -49,8 +49,8 @@ struct OneWaySyncTests {
 
     @Test("Importing existing data")
     func importingExistingData() async throws {
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let parent2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent1 = stack.insertParent(in: stack.context1)
+        let parent2 = stack.insertParent(in: stack.context1)
         parent2.setValue(parent1, forKey: "relatedParentsInverse")
         stack.save(stack.context1)
 
@@ -67,9 +67,8 @@ struct OneWaySyncTests {
     func saveAndMerge() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(name: "bob", in: stack.context1)
         let date = Date(timeIntervalSinceReferenceDate: 10.0)
-        parent.setValue("bob", forKey: "name")
         parent.setValue(date, forKey: "date")
         stack.save(stack.context1)
 
@@ -86,9 +85,8 @@ struct OneWaySyncTests {
     func update() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(name: "bob", in: stack.context1)
         let date = Date(timeIntervalSinceReferenceDate: 10.0)
-        parent.setValue("bob", forKey: "name")
         parent.setValue(date, forKey: "date")
         stack.save(stack.context1)
 
@@ -110,7 +108,7 @@ struct OneWaySyncTests {
     func notANumberAttribute() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(NSNumber(value: Double.nan), forKey: "doubleProperty")
         stack.save(stack.context1)
 
@@ -126,7 +124,7 @@ struct OneWaySyncTests {
     func smallDoubleAttribute() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(NSNumber(value: 0.000555), forKey: "doubleProperty")
         stack.save(stack.context1)
 
@@ -142,7 +140,7 @@ struct OneWaySyncTests {
     func largeDoubleAttribute() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(NSNumber(value: 1.005e10), forKey: "doubleProperty")
         stack.save(stack.context1)
 
@@ -158,7 +156,7 @@ struct OneWaySyncTests {
     func smallFloatAttribute() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(NSNumber(value: Float(0.000555)), forKey: "floatProperty")
         stack.save(stack.context1)
 
@@ -172,8 +170,8 @@ struct OneWaySyncTests {
     func toOneRelationship() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let child = stack.insertChild(in: stack.context1)
         child.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
@@ -193,8 +191,8 @@ struct OneWaySyncTests {
     func toOneRelationshipFromSuperEntity() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "DerivedParent", into: stack.context1)
-        let child = NSEntityDescription.insertNewObject(forEntityName: "DerivedChild", into: stack.context1)
+        let parent = stack.insertObject(entity: "DerivedParent", in: stack.context1)
+        let child = stack.insertObject(entity: "DerivedChild", in: stack.context1)
         child.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
@@ -214,8 +212,8 @@ struct OneWaySyncTests {
     func toManyRelationship() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let child = stack.insertChild(in: stack.context1)
         child.setValue(parent, forKey: "parentWithSiblings")
         stack.save(stack.context1)
 
@@ -232,8 +230,8 @@ struct OneWaySyncTests {
     func inheritedOneToManyRelationshipsBetweenDescendedEntities() async throws {
         try await stack.attachStores()
 
-        let bOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "B", into: stack.context1)
-        let cOnDevice1 = NSEntityDescription.insertNewObject(forEntityName: "C", into: stack.context1)
+        let bOnDevice1 = stack.insertObject(entity: "B", in: stack.context1)
+        let cOnDevice1 = stack.insertObject(entity: "C", in: stack.context1)
         cOnDevice1.setValue(bOnDevice1, forKey: "inverseObject")
         bOnDevice1.setValue(cOnDevice1, forKey: "inverseObject")
         stack.save(stack.context1)
@@ -258,8 +256,8 @@ struct OneWaySyncTests {
 
     @Test("Initial import with no global identifiers provided")
     func initialImportWithNoGlobalIdentifiersProvided() async throws {
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let child = stack.insertChild(in: stack.context1)
         child.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
@@ -284,8 +282,8 @@ struct OneWaySyncTests {
         stack.ensemble2.delegate = nil
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let child = stack.insertChild(in: stack.context1)
         child.setValue(parent, forKey: "parent")
         stack.save(stack.context1)
 
@@ -307,9 +305,9 @@ struct OneWaySyncTests {
         stack.ensemble2.delegate = nil
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
-        let child2 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
+        let child1 = stack.insertChild(in: stack.context1)
+        let child2 = stack.insertChild(in: stack.context1)
         stack.save(stack.context1)
 
         child1.setValue(parent, forKey: "parent")
@@ -341,7 +339,7 @@ struct OneWaySyncTests {
     func smallDataAttributeLeadsToNoExternalDataFiles() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(Data(count: 10000), forKey: "data")
         stack.save(stack.context1)
 
@@ -354,7 +352,7 @@ struct OneWaySyncTests {
     func largeDataAttributeLeadsToExternalDataFile() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(Data(count: 10001), forKey: "data")
         stack.save(stack.context1)
 
@@ -367,7 +365,7 @@ struct OneWaySyncTests {
     func syncOfLargeDataTransfersFile() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(Data(count: 10001), forKey: "data")
         stack.save(stack.context1)
 
@@ -387,7 +385,7 @@ struct OneWaySyncTests {
 
     @Test("Import of large data")
     func importOfLargeData() async throws {
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(Data(count: 10001), forKey: "data")
         stack.save(stack.context1)
 
@@ -404,7 +402,7 @@ struct OneWaySyncTests {
 
         let testString = "sadf s sfd fa d afsd fd asfd af fd dfas  f sfadasdf"
         let data = testString.data(using: .utf8)!
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(data, forKey: "data")
         stack.save(stack.context1)
 
@@ -422,7 +420,7 @@ struct OneWaySyncTests {
         try await stack.syncEnsemble(stack.ensemble2) // Exports baseline
 
         for _ in 0..<500 {
-            NSEntityDescription.insertNewObject(forEntityName: "BatchParent", into: stack.context1)
+            stack.insertObject(entity: "BatchParent", in: stack.context1)
         }
         stack.save(stack.context1)
         try await stack.syncEnsemble(stack.ensemble1)
@@ -438,9 +436,9 @@ struct OneWaySyncTests {
         try await stack.attachStores()
 
         for _ in 0..<100 {
-            let parent = NSEntityDescription.insertNewObject(forEntityName: "BatchParent", into: stack.context1)
+            let parent = stack.insertObject(entity: "BatchParent", in: stack.context1)
             for _ in 0..<5 {
-                let child = NSEntityDescription.insertNewObject(forEntityName: "BatchChild", into: stack.context1)
+                let child = stack.insertObject(entity: "BatchChild", in: stack.context1)
                 child.setValue(parent, forKey: "batchParent")
             }
         }
@@ -461,7 +459,7 @@ struct OneWaySyncTests {
     func updateNegativeLongLong() async throws {
         try await stack.attachStores()
 
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        let parent = stack.insertParent(in: stack.context1)
         parent.setValue(NSNumber(value: Int64.min), forKey: "integer64Attribute")
         stack.save(stack.context1)
 

@@ -15,7 +15,7 @@ struct IntegratorCornerCaseTests {
     }
 
     private func addEventsAndMerge(_ filename: String) async throws {
-        stack.addEventsFromJSONFile(filename, subdirectory: "Corner Cases")
+        try stack.addEventsFromJSONFile(filename, subdirectory: "Corner Cases")
         try await stack.mergeEvents()
     }
 

@@ -20,8 +20,7 @@ struct DependencySyncTests {
         try await stack.attachStores()
 
         let data = Data(count: 10001)
-        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent.setValue("bob", forKey: "name")
+        let parent = stack.insertParent(name: "bob", in: stack.context1)
         parent.setValue(data, forKey: "data")
         stack.save(stack.context1)
 
@@ -55,7 +54,7 @@ struct DependencySyncTests {
     func missingEventInvalidatesFutureEventsFromDevice() async throws {
         try await stack.attachStores()
 
-        NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        stack.insertParent(in: stack.context1)
         stack.save(stack.context1)
         try await stack.syncEnsemble(stack.ensemble1)
 
@@ -63,7 +62,7 @@ struct DependencySyncTests {
         let eventFiles = stack.contentsOfDirectory(atPath: eventsRoot)
         let firstEventFile = (eventsRoot as NSString).appendingPathComponent(eventFiles.last!)
 
-        NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        stack.insertParent(in: stack.context1)
         stack.save(stack.context1)
         try await stack.syncEnsemble(stack.ensemble1)
 
@@ -85,20 +84,17 @@ struct DependencySyncTests {
     @Test("Baseline with missing data files is ignored")
     func baselineWithMissingDataFilesIsIgnored() async throws {
         let data = Data(count: 10001)
-        let parent1 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent1.setValue("bob", forKey: "name")
+        let parent1 = stack.insertParent(name: "bob", in: stack.context1)
         parent1.setValue(data, forKey: "data")
         stack.save(stack.context1)
 
-        let child1 = NSEntityDescription.insertNewObject(forEntityName: "Child", into: stack.context2)
-        child1.setValue("peter", forKey: "name")
+        stack.insertChild(name: "peter", in: stack.context2)
         stack.save(stack.context2)
 
         try await stack.attachStores()
 
         // Add one save event
-        let parent2 = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
-        parent2.setValue("terry", forKey: "name")
+        stack.insertParent(name: "terry", in: stack.context1)
         stack.save(stack.context1)
 
         try await stack.syncEnsemble(stack.ensemble1) // Exports data file

@@ -1,1 +1,1 @@
-[{"severity":2,"source":"..\/GoogleDriveCloudFileSystem.swift","summary":"'CloudFileSystem' doesn't exist at '\/EnsemblesGoogleDrive\/GoogleDriveCloudFileSystem'","notes":[],"start":{"column":43,"line":11}}]
+[{"start":{"column":43,"line":11},"severity":2,"notes":[],"source":"..\/GoogleDriveCloudFileSystem.swift","summary":"'CloudFileSystem' doesn't exist at '\/EnsemblesGoogleDrive\/GoogleDriveCloudFileSystem'"}]

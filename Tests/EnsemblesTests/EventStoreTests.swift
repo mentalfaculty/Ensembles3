@@ -87,19 +87,19 @@ struct EventStoreTests {
         newStore.dismantle()
     }
 
-    // MARK: - Managed Object Context
+    // MARK: - Database
 
-    @Test("Managed object context is nil before install")
-    func managedObjectContextNilBeforeInstall() {
+    @Test("Database is nil before install")
+    func databaseNilBeforeInstall() {
         let store = makeStore()!
-        #expect(store.managedObjectContext == nil)
+        #expect(store.database == nil)
     }
 
-    @Test("Managed object context created after install")
-    func managedObjectContextCreatedAfterInstall() throws {
+    @Test("Database created after install")
+    func databaseCreatedAfterInstall() throws {
         let store = makeStore()!
         try store.prepareNewEventStore()
-        #expect(store.managedObjectContext != nil)
+        #expect(store.database != nil)
         store.dismantle()
     }
 
@@ -193,38 +193,16 @@ struct EventStoreTests {
     }
 
     @Test("Removing outdated data files")
-    func removingOutdatedDataFiles() async throws {
+    func removingOutdatedDataFiles() throws {
         let store = makeStore()!
         try store.prepareNewEventStore()
 
-        store.managedObjectContext!.performAndWait {
-            let ctx = store.managedObjectContext!
-
-            // Create a minimal event and global identifier for the object change
-            let event = NSEntityDescription.insertNewObject(forEntityName: "CDEStoreModificationEvent", into: ctx) as! StoreModificationEvent
-            event.storeModificationEventType = .save
-            event.timestamp = 10.0
-            event.eventRevision = EventRevision.makeEventRevision(forPersistentStoreIdentifier: "store1", revisionNumber: 0, in: ctx)
-
-            let gid = NSEntityDescription.insertNewObject(forEntityName: "CDEGlobalIdentifier", into: ctx) as! GlobalIdentifier
-            gid.globalIdentifier = "gid1"
-            gid.nameOfEntity = "Entity"
-
-            let change = NSEntityDescription.insertNewObject(forEntityName: "CDEObjectChange", into: ctx) as! ObjectChange
-            change.nameOfEntity = "Entity"
-            change.objectChangeType = .insert
-            change.storeModificationEvent = event
-            change.globalIdentifier = gid
-
-            let dataFile1 = NSEntityDescription.insertNewObject(forEntityName: "CDEDataFile", into: ctx) as! DataFile
-            dataFile1.objectChange = change
-            dataFile1.filename = "123"
-
-            let dataFile2 = NSEntityDescription.insertNewObject(forEntityName: "CDEDataFile", into: ctx) as! DataFile
-            dataFile2.filename = "345"
-
-            try! ctx.save()
-        }
+        // Create event, global identifier, object change, and data file via EventStore CRUD
+        let event = try store.insertEvent(uniqueIdentifier: "uid-1", type: .save, timestamp: 10.0)
+        try store.insertRevision(persistentStoreIdentifier: "store1", revisionNumber: 0, eventId: event.id, isEventRevision: true)
+        let gid = try store.insertGlobalIdentifier(globalIdentifier: "gid1", nameOfEntity: "Entity")
+        let change = try store.insertObjectChange(type: .insert, nameOfEntity: "Entity", eventId: event.id, globalIdentifierId: gid.id)
+        try store.insertDataFile(filename: "123", objectChangeId: change.id)
 
         let dataDir = (store.pathToEventDataRootDirectory as NSString).appendingPathComponent("test/data")
         let newdataDir = (store.pathToEventDataRootDirectory as NSString).appendingPathComponent("test/newdata")
@@ -241,12 +219,82 @@ struct EventStoreTests {
         try "Hi".write(toFile: storePath3, atomically: false, encoding: .utf8)
         try "Hi".write(toFile: storePath4, atomically: false, encoding: .utf8)
 
-        try await store.removeUnreferencedDataFiles()
+        try store.removeUnreferencedDataFiles()
 
         #expect(FileManager.default.fileExists(atPath: storePath1))
         #expect(!FileManager.default.fileExists(atPath: storePath2))
         #expect(!FileManager.default.fileExists(atPath: storePath3))
         #expect(FileManager.default.fileExists(atPath: storePath4))
+
+        store.dismantle()
+    }
+
+    // MARK: - Baselines
+
+    @Test("fetchBaselineEvent returns highest globalCount baseline")
+    func fetchBaselineEventReturnsHighest() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 5)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 20)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 10)
+
+        let baseline = try store.fetchBaselineEvent()
+        #expect(baseline?.globalCount == 20)
+
+        store.dismantle()
+    }
+
+    @Test("currentBaselineIdentifier returns identifier of highest globalCount baseline")
+    func currentBaselineIdentifierReturnsHighest() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+
+        try store.insertEvent(uniqueIdentifier: "old-base", type: .baseline, globalCount: 5)
+        try store.insertEvent(uniqueIdentifier: "new-base", type: .baseline, globalCount: 15)
+
+        #expect(store.currentBaselineIdentifier == "new-base")
+
+        store.dismantle()
+    }
+
+    @Test("Multiple baselines coexist and fetchBaselineEvents returns all ordered by globalCount")
+    func multipleBaselinesCoexist() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 10)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 3)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 20)
+
+        let baselines = try store.fetchBaselineEvents()
+        #expect(baselines.count == 3)
+        #expect(baselines[0].globalCount == 3)
+        #expect(baselines[1].globalCount == 10)
+        #expect(baselines[2].globalCount == 20)
+
+        store.dismantle()
+    }
+
+    @Test("Deleting old baselines preserves the most recent one")
+    func deleteOldBaselines() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 5)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 15)
+        try store.insertEvent(uniqueIdentifier: "base-A", type: .baseline, globalCount: 10)
+
+        // Keep only the most recent
+        let best = try store.fetchBaselineEvent()!
+        let all = try store.fetchBaselineEvents()
+        let oldIds = all.filter { $0.id != best.id }.map(\.id)
+        try store.deleteEvents(ids: oldIds)
+
+        let remaining = try store.fetchBaselineEvents()
+        #expect(remaining.count == 1)
+        #expect(remaining[0].globalCount == 15)
 
         store.dismantle()
     }

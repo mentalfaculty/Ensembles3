@@ -92,11 +92,7 @@ struct CloudManagerTests {
     @Test("Export populates cloud")
     func exportPopulatesCloud() async throws {
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        moc.performAndWait {
-            _ = setup.addModEvent(store: storeId, revision: 0, globalCount: 0, timestamp: 0.0)
-            try! moc.save()
-        }
+        try setup.addModEvent(store: storeId, revision: 0, globalCount: 0, timestamp: 0.0)
 
         try await cloudManager.createRemoteDirectoryStructure()
         try await cloudManager.snapshotRemoteFiles()
@@ -111,12 +107,8 @@ struct CloudManagerTests {
     @Test("Export cleans up transit cache")
     func exportCleansUpTransitCache() async throws {
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        moc.performAndWait {
-            _ = setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
-            _ = setup.addModEvent(store: storeId, revision: 4, globalCount: 7, timestamp: 0.1)
-            try! moc.save()
-        }
+        try setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
+        try setup.addModEvent(store: storeId, revision: 4, globalCount: 7, timestamp: 0.1)
 
         try await cloudManager.createRemoteDirectoryStructure()
         try await cloudManager.snapshotRemoteFiles()
@@ -130,12 +122,8 @@ struct CloudManagerTests {
     @Test("Export populates cloud with correct file count")
     func exportPopulatesTransitCache() async throws {
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        moc.performAndWait {
-            _ = setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
-            _ = setup.addModEvent(store: storeId, revision: 4, globalCount: 7, timestamp: 0.1)
-            try! moc.save()
-        }
+        try setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
+        try setup.addModEvent(store: storeId, revision: 4, globalCount: 7, timestamp: 0.1)
 
         try await cloudManager.createRemoteDirectoryStructure()
         try await cloudManager.snapshotRemoteFiles()
@@ -149,38 +137,26 @@ struct CloudManagerTests {
     func migrateFromCloudPopulatesEventStore() async throws {
         // Export an event to cloud
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        nonisolated(unsafe) var event: StoreModificationEvent!
-        moc.performAndWait {
-            event = setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
-            try! moc.save()
-        }
+        let event = try setup.addModEvent(store: storeId, revision: 1, globalCount: 2, timestamp: 0.0)
 
         try await cloudManager.createRemoteDirectoryStructure()
         try await cloudManager.snapshotRemoteFiles()
         try await cloudManager.exportNewLocalNonBaselineEvents()
 
         // Delete the event from the local event store
-        moc.performAndWait {
-            moc.delete(event)
-            try! moc.save()
-        }
+        try setup.eventStore.deleteEvent(id: event.id)
 
         // Verify it's gone
-        moc.performAndWait {
-            let fetched = try? StoreModificationEvent.fetchNonBaselineEvent(forPersistentStoreIdentifier: storeId, revisionNumber: 1, in: moc)
-            #expect(fetched == nil)
-        }
+        let fetched1 = try setup.eventStore.fetchNonBaselineEvent(forPersistentStoreIdentifier: storeId, revisionNumber: 1)
+        #expect(fetched1 == nil)
 
         // Import from cloud into the same cloud manager
         try await cloudManager.snapshotRemoteFiles()
         try await cloudManager.importNewRemoteNonBaselineEvents()
 
         // Verify the event is back
-        moc.performAndWait {
-            let fetched = try? StoreModificationEvent.fetchNonBaselineEvent(forPersistentStoreIdentifier: storeId, revisionNumber: 1, in: moc)
-            #expect(fetched != nil)
-        }
+        let fetched2 = try setup.eventStore.fetchNonBaselineEvent(forPersistentStoreIdentifier: storeId, revisionNumber: 1)
+        #expect(fetched2 != nil)
     }
 
     // MARK: - Removal
@@ -188,12 +164,8 @@ struct CloudManagerTests {
     @Test("Remove out of date event files")
     func removeOutOfDateEventFiles() async throws {
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        moc.performAndWait {
-            _ = setup.addModEvent(store: storeId, revision: 2, globalCount: 12, timestamp: 0.0)
-            _ = setup.addModEvent(store: "abc", revision: 2, globalCount: 12, timestamp: 0.0)
-            try! moc.save()
-        }
+        try setup.addModEvent(store: storeId, revision: 2, globalCount: 12, timestamp: 0.0)
+        try setup.addModEvent(store: "abc", revision: 2, globalCount: 12, timestamp: 0.0)
 
         let path1 = "\(remoteEventsDir)/12_\(storeId)_2.cdeevent"
         let path2 = "\(remoteEventsDir)/11_\(storeId)_3_1of2.cdeevent"
@@ -232,13 +204,13 @@ struct CloudManagerTests {
 
     @Test("Remove out of date baseline files")
     func removeOutOfDateBaselineFiles() async throws {
-        let moc = setup.context
-        moc.performAndWait {
-            let baseline = setup.addModEvent(store: "store1", revision: 2, globalCount: 12, timestamp: 0.0)
-            baseline.storeModificationEventType = .baseline
-            baseline.uniqueIdentifier = "123"
-            try! moc.save()
-        }
+        let baseline = try setup.eventStore.insertEvent(
+            uniqueIdentifier: "123",
+            type: .baseline,
+            timestamp: 0.0,
+            globalCount: 12
+        )
+        try setup.eventStore.insertRevision(persistentStoreIdentifier: "store1", revisionNumber: 2, eventId: baseline.id, isEventRevision: true)
 
         let path1 = "\(remoteBaselinesDir)/12_123_store1_1of2.cdeevent"
         let path2 = "\(remoteBaselinesDir)/12_123_store1_2of2.cdeevent"
@@ -337,13 +309,13 @@ struct CloudManagerTests {
     @Test("Incomplete remote sets ignored when uploading")
     func incompleteRemoteSetsIgnoredWhenUploading() async throws {
         let storeId = setup.persistentStoreIdentifier
-        let moc = setup.context
-        moc.performAndWait {
-            let event = setup.addModEvent(store: storeId, revision: 2, globalCount: 12, timestamp: 0.0)
-            event.storeModificationEventType = .save
-            event.uniqueIdentifier = "123"
-            try! moc.save()
-        }
+        let event = try setup.eventStore.insertEvent(
+            uniqueIdentifier: "123",
+            type: .save,
+            timestamp: 0.0,
+            globalCount: 12
+        )
+        try setup.eventStore.insertRevision(persistentStoreIdentifier: storeId, revisionNumber: 2, eventId: event.id, isEventRevision: true)
 
         try await cloudManager.createRemoteDirectoryStructure()
 

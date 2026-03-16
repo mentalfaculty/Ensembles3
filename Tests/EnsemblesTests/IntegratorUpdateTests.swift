@@ -18,13 +18,13 @@ struct IntegratorUpdateTests {
         s.integrator.performIntegrabilityChecks = false
 
         // Load first fixture and merge
-        s.addEventsFromJSONFile("IntegratorUpdateTestsFixture1")
+        try s.addEventsFromJSONFile("IntegratorUpdateTestsFixture1")
         try await s.mergeEvents()
         s.testMOC.performAndWait { try! s.testMOC.save() }
         s.testMOC.performAndWait { s.testMOC.reset() }
 
         // Load second fixture and merge
-        s.addEventsFromJSONFile("IntegratorUpdateTestsFixture2")
+        try s.addEventsFromJSONFile("IntegratorUpdateTestsFixture2")
         try await s.mergeEvents()
         s.testMOC.performAndWait { try! s.testMOC.save() }
         s.testMOC.performAndWait { s.testMOC.reset() }
@@ -32,13 +32,10 @@ struct IntegratorUpdateTests {
         stack = s
 
         // Fetch results
-        let parents = s.fetchParents()
-        parent1 = parents.last
-
-        let children = s.fetchChildren()
-        child1 = children.first { ($0.value(forKey: "name") as? String) == "child1" }
-        child2 = children.first { ($0.value(forKey: "name") as? String) == "child2" }
-        child3 = children.first { ($0.value(forKey: "name") as? String) == "child3" }
+        parent1 = s.fetchParents().last
+        child1 = s.fetchChild(named: "child1")
+        child2 = s.fetchChild(named: "child2")
+        child3 = s.fetchChild(named: "child3")
     }
 
     @Test("One-to-one relationship updated to nil")
