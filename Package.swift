@@ -1,12 +1,12 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-let version = "3.0.0-beta.7"
+let version = "3.0.0-beta.8"
 let base = "https://github.com/mentalfaculty/Ensembles3/releases/download/\(version)"
 
 let package = Package(
     name: "Ensembles3",
-    platforms: [.iOS(.v16), .macOS(.v13), .tvOS(.v16), .watchOS(.v9)],
+    platforms: [.iOS(.v15), .macOS(.v12), .tvOS(.v15), .watchOS(.v8)],
     products: [
         // Free
         .library(name: "Ensembles", targets: ["Ensembles"]),
@@ -31,51 +31,51 @@ let package = Package(
         // Free
         .binaryTarget(name: "Ensembles",
             url: "\(base)/Ensembles.xcframework.zip",
-            checksum: "1b46965a0ad6bfa4aff06f6020ee6118ae67ba720a6e7a9062529f0f3e6841b0"),
+            checksum: "9d09249fcc34e7a2a0b68fa8a626132f0b49b0059fd221f120cc2771c6e9c879"),
         .binaryTarget(name: "EnsemblesCloudKit",
             url: "\(base)/EnsemblesCloudKit.xcframework.zip",
-            checksum: "87e64d04de61c96240b4f347f2fe01ec46f26ec029d7127994a67807b0772b7d"),
+            checksum: "21b8ef99080e01476d226bfd4cae239aff3f11d5a5ed08fd1c3a8ef10fd10d51"),
         .binaryTarget(name: "EnsemblesLocalFile",
             url: "\(base)/EnsemblesLocalFile.xcframework.zip",
-            checksum: "5af374671bdbc8908425ec0bc151cfc0f04e0b0b2c1dc09748da5c769dd3ba02"),
+            checksum: "9d4c5939ea1221d3661653b25e3765a80832727cebaf7d183ddf9131bb8042c4"),
         .binaryTarget(name: "EnsemblesMemory",
             url: "\(base)/EnsemblesMemory.xcframework.zip",
-            checksum: "7ba711f3fc9e46d70190bc81fef17e59399f159f2e5e3de0da1dfc84f6092eac"),
+            checksum: "573c5b35cd375c5a9b98737081b1ef0b1fe52ecdd382b472685ce965363ba7bb"),
         .binaryTarget(name: "EnsemblesSwiftData",
             url: "\(base)/EnsemblesSwiftData.xcframework.zip",
-            checksum: "1e94ff2987c9a52ed7d14415e81ff598348aa60316b3c3e18b25d46468e9757d"),
+            checksum: "53eff82285b238bece790793f7ac46374a7720e56183a4ca9497f94ef70514ce"),
         // Paid
         .binaryTarget(name: "EnsemblesGoogleDrive",
             url: "\(base)/EnsemblesGoogleDrive.xcframework.zip",
-            checksum: "2c3e96242f9f977bdf8345d0084cbb8103bf5a270a8739aec83910e4c54bb505"),
+            checksum: "45da877b0286a402075122cb851152946ffa80a2213bda34b1a94eb371cac919"),
         .binaryTarget(name: "EnsemblesOneDrive",
             url: "\(base)/EnsemblesOneDrive.xcframework.zip",
-            checksum: "47b6aa2237ea89ddda49647cd0c6861a6e2c44c5dbb3b6e506c35a1c7d174ecd"),
+            checksum: "88b2a0026362b8f777db528e3415fb1c35b32a6f915941c608d3dc238cc5cea8"),
         .binaryTarget(name: "EnsemblesPCloud",
             url: "\(base)/EnsemblesPCloud.xcframework.zip",
-            checksum: "2af26d20995913b054030ab0c6c27e34a1c3a85b375748f37bbd2a6ec2ab3d7d"),
+            checksum: "6539c7e430e26b749fab7686e3c5f2fe661da2d3f3da46219dc3b66728945e3b"),
         .binaryTarget(name: "EnsemblesWebDAV",
             url: "\(base)/EnsemblesWebDAV.xcframework.zip",
-            checksum: "eaecca6384a6400612401070e7c81d54a08521f2e1bc951f6ae27c251c920fb1"),
+            checksum: "308b14ea993ff558dae4179a1e1d3428cc6c810b061cce7ae6a16c263ce6cbb3"),
         .binaryTarget(name: "EnsemblesEncrypted",
             url: "\(base)/EnsemblesEncrypted.xcframework.zip",
-            checksum: "8c01c77bb0231f06a7b13a4494b301a440f48e493e9c4c3f825e410b7fa4b0b6"),
+            checksum: "a1ff1952aabe15963052ec473db881971af3d9b38ccd5a14dacd6525093388cb"),
         // Paid + external SDK required (add the SDK as a separate package dependency)
         .binaryTarget(name: "EnsemblesDropbox",
             url: "\(base)/EnsemblesDropbox.xcframework.zip",
-            checksum: "3daa408eda1afb7769c91766b475fbe028e4037e4292649e6b64bb733d1e8534"),
+            checksum: "02da89e6a87b8009d7cc7c11635a41baf4cc4019f9ca619c0db398965279a6d2"),
         .binaryTarget(name: "EnsemblesS3",
             url: "\(base)/EnsemblesS3.xcframework.zip",
-            checksum: "2aa608631b02d03d2b49bd0db3d59ab8bd737f91c8628ada2dffa7dbab02249d"),
+            checksum: "899552f005a759fa30c96b87f7d8394bdeb315931b72c31dc4b51697d0de46e5"),
         .binaryTarget(name: "EnsemblesBox",
             url: "\(base)/EnsemblesBox.xcframework.zip",
-            checksum: "27833606e3fbdb795e3f25e74503e3af8e2dffa05231f3464bd9e76b80594137"),
+            checksum: "72b1534990be2fc395d25d5e6ff1d5bc36af6c865f5abe5bf91a4437a4c998aa"),
         .binaryTarget(name: "EnsemblesZip",
             url: "\(base)/EnsemblesZip.xcframework.zip",
-            checksum: "c3dd2d824b3b2506331c5f1c7e0696396951cb31ff4aeb7fc621dcb655d6f0c8"),
+            checksum: "7cec292240fda2c334a2bd5e113e8f0846f78dbf570bc89b77894e4a4fec5b6a"),
         .binaryTarget(name: "EnsemblesMultipeer",
             url: "\(base)/EnsemblesMultipeer.xcframework.zip",
-            checksum: "6c2698a97280c24d738c8f7bdf097ff02d76a73838476640615934c365655e24"),
+            checksum: "6e25cc1ea7c748037f3011b566b493f6d0c5b2533dc2425e4f31c6266e93db5d"),
         // Tests
         .testTarget(
             name: "EnsemblesTests",

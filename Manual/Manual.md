@@ -288,7 +288,7 @@ If you don't specify any traits, only the core targets (no external dependencies
 
 ### Platform Requirements
 
-Ensembles 3 supports iOS 16+, macOS 13+, tvOS 16+, and watchOS 9+. SwiftData support requires iOS 17+ / macOS 14+ / tvOS 17+ / watchOS 10+.
+Ensembles 3 supports iOS 15+, macOS 12+, tvOS 15+, and watchOS 8+. SwiftData support requires iOS 17+ / macOS 14+ / tvOS 17+ / watchOS 10+.
 
 The package requires Swift 6.1+ for traits. Swift 6.0+ is sufficient for strict concurrency if you don't use trait-gated targets.
 
