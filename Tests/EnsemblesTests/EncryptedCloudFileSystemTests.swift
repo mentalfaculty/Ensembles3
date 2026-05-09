@@ -255,6 +255,22 @@ struct EncryptedCloudFileSystemTests {
         #expect(nilFS == nil)
     }
 
+    @Test("EncryptedCloudFileSystem forwards cloudIdentityTokenClasses to its inner backend")
+    func forwardsCloudIdentityTokenClassesToInner() throws {
+        // The wrapper must surface whatever its inner backend exposes, since the
+        // identity token round-trip uses the wrapper's classes list at decode time.
+        let inner = MemoryCloudFileSystem()
+        let wrapped = try #require(EncryptedCloudFileSystem(
+            cloudFileSystem: inner,
+            password: "test-password"
+        ))
+
+        let innerNames = Set(inner.cloudIdentityTokenClasses.map { String(describing: $0) })
+        let wrappedNames = Set(wrapped.cloudIdentityTokenClasses.map { String(describing: $0) })
+
+        #expect(innerNames == wrappedNames)
+    }
+
     @Test("Modern and legacy can cross-decrypt via cloud FS")
     func crossFormatDecrypt() async throws {
         let memoryFS = MemoryCloudFileSystem()

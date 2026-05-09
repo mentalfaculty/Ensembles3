@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.0-beta.10
+
+- **Replace the `NSObject.self` catch-all in the cloud-identity-token unarchive allowlist with a per-backend tight list.** The beta.9 fix used `NSObject.self` as a catch-all, which Apple's `NSKeyedUnarchiver.validateAllowedClass:forKey:` runtime validator started warning would become an error in a future OS release. Each `CloudFileSystem` backend now declares the classes it might return from `fetchUserIdentity()` via a new `cloudIdentityTokenClasses: [AnyClass]` protocol property. The default lists Foundation primitives only; CloudKit overrides to add `CKRecord.ID`. Wrapper backends (Encrypted, Zip) forward to their inner backend. The console warning is gone; the every-launch detach behaviour fixed in beta.9 stays fixed. (#2)
+
 ## 3.0.0-beta.9
 
 - **Fix every-launch `cloudIdentityChanged` detach loop on CloudKit-backed apps.** The cloud-identity token's secure-unarchive allowlist did not include `CKRecord.ID`, so the token came back nil on every restore, the identity check compared the live non-nil token against nil, and the ensemble force-detached on every launch — wiping the local event store and re-registering as a fresh peer each time. Reproduced 100% on iOS 26 / macOS 26. Existing affected installs self-recover on the next launch after upgrading; no migration step needed. (#1)

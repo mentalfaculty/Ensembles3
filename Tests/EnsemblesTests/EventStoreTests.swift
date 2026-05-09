@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import CoreData
 @_spi(Testing) import Ensembles
+import EnsemblesMemory
 
 @Suite("EventStore", .serialized)
 struct EventStoreTests {
@@ -310,6 +311,12 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+            IdentityTokenStandIn.self,
+        ])
         let restoredToken = restored.cloudFileSystemIdentityToken
         #expect((restoredToken as? NSObject)?.isEqual(token) == true,
                 "Restored token must equal the original — this is the regression for cloudIdentityChanged-on-every-launch")
@@ -325,6 +332,11 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+        ])
         let restoredToken = restored.cloudFileSystemIdentityToken as? NSString
         #expect(restoredToken == token)
         restored.dismantle()
@@ -342,6 +354,11 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+        ])
         #expect(restored.cloudFileSystemIdentityToken == nil)
         restored.dismantle()
     }
@@ -359,6 +376,11 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+        ])
         let restoredToken = restored.cloudFileSystemIdentityToken as? NSDictionary
         #expect(restoredToken == token)
         restored.dismantle()
@@ -379,6 +401,12 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+            IdentityTokenStandIn.self,
+        ])
         let restoredToken = restored.cloudFileSystemIdentityToken
         #expect((restoredToken as? NSObject)?.isEqual(original) == true)
         restored.dismantle()
@@ -397,6 +425,12 @@ struct EventStoreTests {
         store.dismantle()
 
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+            IdentityTokenStandIn.self,
+        ])
         // Live token fetched at next attach — same value, fresh allocation.
         // The nil clause mirrors the production predicate's shape; liveToken is never
         // actually nil here (the upcast is always non-nil), which is intentional — the
@@ -427,8 +461,61 @@ struct EventStoreTests {
         // at .error in the production code — verified by code review, not asserted here),
         // and the token should come back nil.
         let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+            IdentityTokenStandIn.self,
+        ])
         #expect(restored.cloudFileSystemIdentityToken == nil)
         restored.dismantle()
+    }
+
+    @Test("Token decodes with a tight per-backend allowlist (no NSObject catch-all)")
+    func tightAllowlistDecodesCustomClass() throws {
+        // Beta.9 used `NSObject.self` as a catch-all in the unarchive allowlist,
+        // which Apple has begun warning will become an error. The fix replaces
+        // the catch-all with a per-backend explicit list. This test proves the
+        // explicit list works without the catch-all.
+        let store = makeStore()!
+        let original = IdentityTokenStandIn("user-record-id-123")
+        store.cloudFileSystemIdentityToken = original
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+
+        // The deliberately tight list: Foundation primitives plus the concrete
+        // stand-in. No NSObject.self.
+        let allowed: [AnyClass] = [
+            NSString.self, NSNumber.self, NSData.self, NSDate.self,
+            NSUUID.self, NSURL.self, NSArray.self, NSDictionary.self,
+            NSNull.self,
+            IdentityTokenStandIn.self,
+        ]
+        restored.decodeCloudFileSystemIdentityToken(allowedClasses: allowed)
+
+        let restoredToken = restored.cloudFileSystemIdentityToken
+        #expect((restoredToken as? NSObject)?.isEqual(original) == true)
+        restored.dismantle()
+    }
+
+    @Test("Default cloudIdentityTokenClasses contains Foundation primitives only")
+    func defaultAllowlistContents() {
+        // A backend that does not override `cloudIdentityTokenClasses` inherits the
+        // protocol default. This test pins the documented contract: Foundation
+        // primitives only — no NSObject catch-all.
+        let fs = MemoryCloudFileSystem()
+        let classes = fs.cloudIdentityTokenClasses
+        let names = Set(classes.map { String(describing: $0) })
+
+        let expected: Set<String> = [
+            "NSString", "NSNumber", "NSData", "NSDate",
+            "NSUUID", "NSURL", "NSArray", "NSDictionary",
+            "NSNull",
+        ]
+        #expect(names == expected,
+                "Default allowlist must be exactly Foundation primitives — guards against a regression that re-adds NSObject.self or any backend-specific class to the default")
     }
 }
 
