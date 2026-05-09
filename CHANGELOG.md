@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.0-beta.9
+
+- **Fix every-launch `cloudIdentityChanged` detach loop on CloudKit-backed apps.** The cloud-identity token's secure-unarchive allowlist did not include `CKRecord.ID`, so the token came back nil on every restore, the identity check compared the live non-nil token against nil, and the ensemble force-detached on every launch — wiping the local event store and re-registering as a fresh peer each time. Reproduced 100% on iOS 26 / macOS 26. Existing affected installs self-recover on the next launch after upgrading; no migration step needed. (#1)
+- **Documentation:** the *Migrating from Ensembles 2* chapter now calls out the CloudKit zone-matching constraint — your E3 build must use the same `CloudKitFileSystem` initializer your E2 build used, because the two private-database initializers write to different zones and devices in different zones cannot see each other's records. The chapter also corrects the previous claim that the local event store auto-migrates from E2 — it does not; on first attach E3 wipes the E2 event store and rebuilds from the cloud.
+- **Documentation:** fixed non-compiling `CloudKitFileSystem(ubiquityContainerIdentifier:)` single-argument samples scattered across README, DocC articles, and doc comments (no such initializer exists; replaced with the two-argument `privateDatabaseForUbiquityContainerIdentifier:schemaVersion:` form).
+
 ## 3.0.0-beta.8
 
 - **Lowered platform minimums** to iOS 15, macOS 12, tvOS 15, watchOS 8 (down from iOS 16 / macOS 13 / tvOS 16 / watchOS 9). SwiftData features still require iOS 17+ / macOS 14+ / tvOS 17+ / watchOS 10+.

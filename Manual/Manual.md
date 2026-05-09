@@ -1568,6 +1568,8 @@ let cloudFS = CloudKitFileSystem(
 
 CloudKit is free for most apps (Apple provides generous storage quotas per user). It doesn't require a license key.
 
+`CloudKitFileSystem` also offers a default-zone initializer (`init(ubiquityContainerIdentifier:rootDirectory:usePublicDatabase:schemaVersion:)`) for apps that need to use CloudKit's default zone — most often, apps migrating from an Ensembles 2 fleet that was already on the default zone. The two initializers write to different CloudKit zones, and devices in different zones cannot see each other's records, so if you're migrating from E2 you must use the same initializer your E2 build used. See the *Migrating from Ensembles 2* chapter.
+
 ## iCloud Drive
 
 > **Deprecated.** This backend exists for backward compatibility with Ensembles 2 apps that used `CDEICloudFileSystem`. For new projects, use CloudKit instead — it's faster and more reliable.
@@ -2119,15 +2121,22 @@ In debug builds, `.trace` is a good choice. In production, the default `.error` 
 
 # Migrating from Ensembles 2
 
-Ensembles 3 is fully backward compatible with Ensembles 2 cloud data. You can migrate without a data reset — existing peers continue syncing seamlessly.
+Ensembles 3 is fully backward compatible with Ensembles 2 *cloud* data, so existing peers continue syncing seamlessly across a mixed fleet during a staged rollout. The migrated device's local event-tracking database is rebuilt from the cloud on first attach (see *What Resets on Migration* below) — your app's own Core Data or SwiftData store is untouched.
 
 ## What's Backward Compatible
 
 - **Cloud files** — The directory structure and file formats are identical. An E3 device can read files written by E2, and vice versa (in compatibility mode).
-- **Event store** — E3 automatically migrates from E2's Core Data event store to E3's SQLite format on first launch. This migration is transparent and non-destructive.
 - **JSON format** — Property change values use the same serialization format.
 - **CloudKit records** — Record types and field names are preserved.
 - **Encryption** — E3's `.legacy` encryption format matches E2's `CDEEncryptedCloudFileSystem`.
+
+## What Resets on Migration
+
+The local event store does not carry across. E3 uses a different on-disk database format (raw SQLite vs. E2's Core Data store), and there is no automatic conversion. On the first call to `attachPersistentStore()` after the swap, E3 deletes the existing event-data directory and registers as a fresh peer with the cloud. Your app's persistent store (your own Core Data or SwiftData SQLite) is untouched — only Ensembles' internal event-tracking database is reset.
+
+In practice this means the migrated device is treated like a new peer joining the ensemble: a fresh `persistentStoreIdentifier` is generated, the current baseline is pulled from the cloud, and the user's data ends up consistent with the rest of the ensemble. Local events that hadn't yet synced from E2 are lost, so if that matters for your migration window, sync the E2 build to completion before deploying the E3 build.
+
+The first attach after migration also produces a forced detach with `EnsembleError.cloudIdentityChanged` — see step 6 below.
 
 ## Step-by-Step Migration
 
@@ -2160,7 +2169,20 @@ ensemble?.compatibilityMode = .ensembles2Compatible
 
 Compatibility mode restricts E3 to features and formats that E2 can understand. Most notably, it disables compressed model hashes (which E2 can't decode).
 
-### 3. Update API Names
+### 3. Match Your Existing CloudKit Zone (CloudKit Users Only)
+
+If your existing E2 fleet uses `CDECloudKitFileSystem`, the most important thing to get right when migrating is which initializer you call in your E3 code. E2 and E3 both expose two private-database initializers, and they pick different CloudKit zones:
+
+| Initializer | Zone |
+|---|---|
+| `init(ubiquityContainerIdentifier:rootDirectory:usePublicDatabase:schemaVersion:)` | CloudKit's default zone (`_defaultZone`) |
+| `init(privateDatabaseForUbiquityContainerIdentifier:schemaVersion:)` | Custom zone `com.mentalfaculty.ensembles.zone.schema2` |
+
+Your E3 build must use the same initializer that your E2 build uses. If the two ever end up in different zones, devices cannot see each other's records — even with the same iCloud container and the same schema version. The symptom is `❌ SYNC ERROR Code: 2 - Description: Failed to fetch some records` on the still-E2 devices, with a "Located some items in CloudKit without data" warning in the log.
+
+To find out which zone your E2 fleet is on, look at the `CDECloudKitFileSystem` init in your existing E2 source. If it calls `initWithUbiquityContainerIdentifier:rootDirectory:usePublicDatabase:schemaVersion:`, you're on the default zone — call the matching E3 init. If it calls `initWithPrivateDatabaseForUbiquityContainerIdentifier:schemaVersion:`, you're on the custom zone — call the matching E3 init. Don't switch initializers as part of the migration; switch only after the entire fleet is on E3 (and even then, only if you have a reason to).
+
+### 4. Update API Names
 
 | Ensembles 2 (Objective-C) | Ensembles 3 (Swift) |
 |---|---|
@@ -2179,7 +2201,7 @@ Compatibility mode restricts E3 to features and formats that E2 can understand. 
 | `NSMergePolicy` on delegate | `shouldSaveMergedChangesIn` delegate |
 | `CDEPersistentStoreEnsembleDelegate` globalIDs: `[NSObject]` | `[String?]` |
 
-### 4. Update Concurrency Patterns
+### 5. Update Concurrency Patterns
 
 E2 used completion handlers everywhere:
 
@@ -2201,16 +2223,45 @@ do {
 }
 ```
 
-### 5. Test Thoroughly
+### 6. Handle the First-Launch Identity Detach
+
+On the first launch after migrating from E2, expect a forced detach with `EnsembleError.cloudIdentityChanged` (code 202). The first attach in E3 wipes the existing E2 event store and registers a fresh peer, but the cached cloud identity token is not carried across either. The first identity check after attach therefore sees a missing token, treats it as an account change, and forces a detach.
+
+This is benign — re-attaching captures the current identity and steady state resumes — but if your app reacts to `didDetachWithError` by disabling sync, every migrating user will silently lose sync until they toggle it back on.
+
+Handle it explicitly: catch `cloudIdentityChanged` in `didDetachWithError`, leave sync enabled, and schedule a re-attach (or a `sync()` call, which re-attaches if needed) shortly after.
+
+```swift
+func coreDataEnsemble(
+    _ ensemble: CoreDataEnsemble,
+    didDetachWithError error: Error
+) {
+    if let error = error as? EnsembleError, error == .cloudIdentityChanged {
+        // First launch after E2 → E3 migration, or the user genuinely
+        // switched accounts. Re-attach rather than disabling sync.
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            try? await ensemble.attachPersistentStore()
+        }
+        return
+    }
+    // Other errors: disable sync and surface to the user.
+    disableSyncInUI()
+}
+```
+
+The same pattern is worth applying to `EnsembleError.hardwareIdentityChanged` (213) and `EnsembleError.storeUnregistered` (205) in general, not just during migration. All three are recoverable by re-attaching, and you don't want a transient identity hiccup to permanently disable sync. Errors like `dataCorruptionDetected` do warrant disabling sync until the user intervenes — they indicate state that re-attaching alone won't fix.
+
+### 7. Test Thoroughly
 
 Before releasing to users:
 
 - Verify your app can read existing E2 cloud data.
 - Verify that E2 peers can read data exported by E3 (in `.ensembles2Compatible` mode).
-- Test the event store migration (launch on a device that had E2 data).
+- Test the first-launch reset on a device that previously ran E2 — including the `cloudIdentityChanged` recovery path.
 - Test with encrypted data if you used `CDEEncryptedCloudFileSystem` (use `.legacy` format).
 
-### 6. Switch to Full E3 Mode
+### 8. Switch to Full E3 Mode
 
 Once all users have upgraded (or when you drop E2 support):
 

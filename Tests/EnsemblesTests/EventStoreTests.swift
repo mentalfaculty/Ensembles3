@@ -298,4 +298,177 @@ struct EventStoreTests {
 
         store.dismantle()
     }
+
+    // MARK: - Cloud Identity Token Round-Trip
+
+    @Test("Identity token round-trips for an NSSecureCoding custom class (regression)")
+    func identityTokenRoundTripCustomClass() throws {
+        let store = makeStore()!
+        let token = IdentityTokenStandIn("user-record-id-123")
+        store.cloudFileSystemIdentityToken = token
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        let restoredToken = restored.cloudFileSystemIdentityToken
+        #expect((restoredToken as? NSObject)?.isEqual(token) == true,
+                "Restored token must equal the original — this is the regression for cloudIdentityChanged-on-every-launch")
+        restored.dismantle()
+    }
+
+    @Test("Identity token round-trips for an NSString")
+    func identityTokenRoundTripNSString() throws {
+        let store = makeStore()!
+        let token: NSString = "an-account-email@example.com"
+        store.cloudFileSystemIdentityToken = token
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        let restoredToken = restored.cloudFileSystemIdentityToken as? NSString
+        #expect(restoredToken == token)
+        restored.dismantle()
+    }
+
+    @Test("Identity token round-trips as nil when never set")
+    func identityTokenRoundTripNil() throws {
+        // prepareNewEventStore() is the path that writes metadata while the token is still nil
+        // on a fresh install. The restored value must be nil — never an NSNull placeholder,
+        // which would compare unequal to a freshly-fetched real token on the next attach
+        // and falsely trigger cloudIdentityChanged.
+        let store = makeStore()!
+        #expect(store.cloudFileSystemIdentityToken == nil)
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        #expect(restored.cloudFileSystemIdentityToken == nil)
+        restored.dismantle()
+    }
+
+    @Test("Identity token round-trips for a Foundation graph (NSDictionary of primitives)")
+    func identityTokenRoundTripFoundationGraph() throws {
+        let store = makeStore()!
+        let token: NSDictionary = [
+            "id": "user-42" as NSString,
+            "session": NSNumber(value: 12345),
+            "blob": Data([0x01, 0x02, 0x03]) as NSData,
+        ]
+        store.cloudFileSystemIdentityToken = token
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        let restoredToken = restored.cloudFileSystemIdentityToken as? NSDictionary
+        #expect(restoredToken == token)
+        restored.dismantle()
+    }
+
+    @Test("Identity check uses isEqual semantics after round-trip")
+    func identityTokenIsEqualSemantics() throws {
+        // Pin to the exact comparison shape the production code performs at
+        // CoreDataEnsemble.swift line 1072:
+        //     (token as? NSObject)?.isEqual(eventStore.cloudFileSystemIdentityToken) ?? true
+        // Guards against a future refactor that switches to `==` or `===` and silently
+        // breaks the comparison for Foundation-bridged classes. Receiver direction
+        // matches `identityTokenRoundTripCustomClass` for consistency across the section.
+        let store = makeStore()!
+        let original = IdentityTokenStandIn("user-record-id-123")
+        store.cloudFileSystemIdentityToken = original
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        let restoredToken = restored.cloudFileSystemIdentityToken
+        #expect((restoredToken as? NSObject)?.isEqual(original) == true)
+        restored.dismantle()
+    }
+
+    @Test("Round-trip preserves identity-check truth (mirrors checkCloudFileSystemIdentity)")
+    func identityCheckTruthAfterRoundTrip() throws {
+        // End-to-end: a token written by one EventStore and restored by another must
+        // satisfy the same predicate that CoreDataEnsemble.checkCloudFileSystemIdentity
+        // uses to decide whether to force a detach. If this fails, the user sees the
+        // every-launch detach loop.
+        let store = makeStore()!
+        let original = IdentityTokenStandIn("user-record-id-123")
+        store.cloudFileSystemIdentityToken = original
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        // Live token fetched at next attach — same value, fresh allocation.
+        // The nil clause mirrors the production predicate's shape; liveToken is never
+        // actually nil here (the upcast is always non-nil), which is intentional — the
+        // test exercises the isEqual branch, not the nil-token short-circuit.
+        let liveToken = IdentityTokenStandIn("user-record-id-123")
+        let identityValid = liveToken as NSObject? == nil
+            || ((liveToken as NSObject).isEqual(restored.cloudFileSystemIdentityToken))
+        #expect(identityValid)
+        restored.dismantle()
+    }
+
+    @Test("Corrupt cloudFileSystemIdentity blob produces nil without crashing")
+    func corruptIdentityBlobProducesNil() throws {
+        // Set up a valid store first so the rest of the metadata is present and well-formed.
+        let store = makeStore()!
+        store.cloudFileSystemIdentityToken = IdentityTokenStandIn("user-record-id-123")
+        try store.prepareNewEventStore()
+        let storeInfoPath = (store.pathToEventStoreRootDirectory as NSString)
+            .appendingPathComponent("store.plist")
+        store.dismantle()
+
+        // Corrupt only the cloudFileSystemIdentity entry of the on-disk plist.
+        let plist = try #require(NSMutableDictionary(contentsOfFile: storeInfoPath))
+        plist["cloudFileSystemIdentity"] = Data([0xDE, 0xAD, 0xBE, 0xEF])  // not a valid keyed archive
+        #expect(plist.write(toFile: storeInfoPath, atomically: true))
+
+        // Re-init: the unarchive should fail, the do/catch should swallow it (and log
+        // at .error in the production code — verified by code review, not asserted here),
+        // and the token should come back nil.
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        #expect(restored.cloudFileSystemIdentityToken == nil)
+        restored.dismantle()
+    }
+}
+
+// Stands in for CKRecord.ID so the core test target does not need to import CloudKit.
+// Conforms to the same NSObjectProtocol & NSCopying & NSCoding contract that
+// `EventStore.cloudFileSystemIdentityToken` requires, and to NSSecureCoding so it
+// can be archived under `requiringSecureCoding: true`.
+//
+// The @objc annotation is load-bearing: NSKeyedArchiver records the ObjC class name in the
+// archive, so without it the Swift-mangled name is encoded and the unarchiver cannot decode
+// the token after any rename or module change.
+@objc(IdentityTokenStandIn)
+private final class IdentityTokenStandIn: NSObject, NSSecureCoding, NSCopying {
+    static var supportsSecureCoding: Bool { true }
+
+    let value: String
+
+    init(_ value: String) {
+        self.value = value
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        guard let v = coder.decodeObject(of: NSString.self, forKey: "value") as String? else {
+            return nil
+        }
+        self.value = v
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(value as NSString, forKey: "value")
+    }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? IdentityTokenStandIn else { return false }
+        return other.value == value
+    }
+
+    override var hash: Int { value.hashValue }
+
+    func copy(with zone: NSZone? = nil) -> Any { IdentityTokenStandIn(value) }
 }
