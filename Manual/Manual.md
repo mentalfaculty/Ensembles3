@@ -1656,6 +1656,56 @@ let cloudFS = PCloudCloudFileSystem(authenticator: authenticator)
 
 pCloud tokens don't expire, so users only need to authorize once. The authenticator automatically detects the correct API endpoint (US or EU) based on the user's account region.
 
+## Supabase
+
+Supabase is an open-source backend-as-a-service that bundles Postgres, authentication, and S3-compatible storage. Ensembles uses Supabase Storage as the file backend and Supabase's built-in GoTrue auth for sign-in.
+
+Because Supabase auth is built-in, Supabase is the simplest non-Apple option for SwiftData apps that want a real server (for example, to read sync data from a web dashboard later) without having to stand up auth infrastructure.
+
+**Set up the project.**
+
+1. Create a project at <https://supabase.com>.
+2. In *Authentication → Providers*, enable Email.
+3. In *Storage*, create a **private** bucket named `ensembles` (or whatever you prefer).
+4. In *SQL Editor*, apply this row-level-security policy so each user can only access objects under their own UUID prefix:
+
+```sql
+create policy "Ensembles per-user access" on storage.objects
+    for all
+    to authenticated
+    using ((storage.foldername(name))[1] = auth.uid()::text)
+    with check ((storage.foldername(name))[1] = auth.uid()::text);
+```
+
+**Sign in and create the file system.**
+
+```swift
+import EnsemblesSupabase
+
+let projectURL = URL(string: "https://abcd1234.supabase.co")!
+let anonKey = "<publishable anon key>"
+
+let auth = SupabaseAuthenticator(configuration: .init(
+    projectURL: projectURL,
+    anonKey: anonKey
+))
+
+try await auth.signIn(email: "user@example.com", password: "...")
+
+let fs = SupabaseCloudFileSystem(
+    configuration: .init(
+        projectURL: projectURL,
+        anonKey: anonKey,
+        bucket: "ensembles"
+    ),
+    authenticator: auth
+)
+```
+
+The credentials returned by sign-in are stored in the Keychain, so subsequent launches can use the authenticator immediately without re-signing in. The file system automatically prepends each object key with the authenticated user's UUID, so the RLS policy above is sufficient — there is no per-app path bookkeeping for you to do.
+
+If your app already manages a Supabase session (e.g. through the official `supabase-swift` SDK), the alternative `SupabaseCloudFileSystem(configuration:accessToken:)` initialiser takes a bearer token directly. In that mode you are responsible for token refresh and for any user-prefixing required by your RLS policy.
+
 ## WebDAV
 
 Syncs via any WebDAV-compatible server — Nextcloud, ownCloud, Synology NAS, or your own.

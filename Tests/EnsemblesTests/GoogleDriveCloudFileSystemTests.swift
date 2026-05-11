@@ -323,4 +323,40 @@ struct GoogleDriveCloudFileSystemTests {
 
         #expect(parsed["nextPageToken"] == nil)
     }
+
+    // MARK: - Single-flight refresh smoke test
+
+    @Test("Concurrent validAccessToken calls don't deadlock on expired credential")
+    func concurrentValidAccessTokenOnExpiredCredential() async throws {
+        let auth = GoogleDriveAuthenticator(configuration: .init(
+            clientID: "concurrent-test-client.apps.googleusercontent.com",
+            redirectURI: "com.test.googledrive:/oauth2callback"
+        ))
+        // Seed an already-expired credential. The refresh attempt will fail at
+        // the network layer, but the single-flight path must serialise so all
+        // ten callers receive the same outcome without deadlock.
+        auth._seedCredential(
+            accessToken: "old",
+            refreshToken: "rt-test",
+            expiresAt: Date().addingTimeInterval(-3600)
+        )
+
+        await withTaskGroup(of: Error?.self) { group in
+            for _ in 0..<10 {
+                group.addTask {
+                    do {
+                        _ = try await auth.validAccessToken()
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }
+            }
+            var errorCount = 0
+            for await result in group {
+                if result != nil { errorCount += 1 }
+            }
+            #expect(errorCount == 10)
+        }
+    }
 }
