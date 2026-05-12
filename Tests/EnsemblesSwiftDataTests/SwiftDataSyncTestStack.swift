@@ -18,7 +18,7 @@ final class SwiftDataSyncTestStack: NSObject, CoreDataEnsembleDelegate, @uncheck
 
     let testRootDirectory: String
 
-    var globalIdentifiersBlock: (([NSManagedObject]) -> [String?])?
+    var globalIdentifiersBlock: (([NSManagedObject]) -> [String])?
 
     init(modelTypes: [any PersistentModel.Type]) {
         let rootDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("SwiftDataSyncTest_\(ProcessInfo.processInfo.globallyUniqueString)")
@@ -125,8 +125,17 @@ final class SwiftDataSyncTestStack: NSObject, CoreDataEnsembleDelegate, @uncheck
         }
     }
 
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] {
-        globalIdentifiersBlock?(objects) ?? []
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        if let block = globalIdentifiersBlock {
+            return block(objects)
+        }
+        return objects.map { obj in
+            if obj.entity.attributesByName["name"] != nil,
+               let name = obj.value(forKey: "name") as? String, !name.isEmpty {
+                return name
+            }
+            return obj.objectID.uriRepresentation().absoluteString
+        }
     }
 
     // MARK: - Attach / Merge / Sync

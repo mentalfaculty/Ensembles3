@@ -16,6 +16,7 @@ struct CoreDataEnsembleTests {
     let managedObjectContext: NSManagedObjectContext
     let mockFS: MockLocalCloudFileSystem
     let ensemble: CoreDataEnsemble
+    private let defaultStubDelegate: StubGlobalIDDelegate
 
     init() throws {
         let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("CoreDataEnsembleTests_\(ProcessInfo.processInfo.globallyUniqueString)")
@@ -58,6 +59,9 @@ struct CoreDataEnsembleTests {
             cloudFileSystem: fs,
             localDataRootDirectoryURL: URL(fileURLWithPath: eventDataRoot)
         )!
+        let stub = StubGlobalIDDelegate()
+        ens.delegate = stub
+        self.defaultStubDelegate = stub
         self.ensemble = ens
     }
 
@@ -135,6 +139,7 @@ struct CoreDataEnsembleTests {
         ensemble.dismantle()
 
         weak var weakEnsemble: CoreDataEnsemble?
+        let stub = StubGlobalIDDelegate()
         do {
             let eventDataRoot = (rootDir as NSString).appendingPathComponent("eventStore2")
             let e = CoreDataEnsemble(
@@ -146,6 +151,7 @@ struct CoreDataEnsembleTests {
                 cloudFileSystem: mockFS,
                 localDataRootDirectoryURL: URL(fileURLWithPath: eventDataRoot)
             )!
+            e.delegate = stub
             try await e.attachPersistentStore()
             try await e.sync()
             weakEnsemble = e
@@ -273,7 +279,9 @@ private final class DetachTrackingDelegate: NSObject, CoreDataEnsembleDelegate, 
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, didSaveMergeChangesWith notification: Notification) {}
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] { [] }
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
+    }
 }
 
 private final class SaveDuringImportDelegate: NSObject, CoreDataEnsembleDelegate, @unchecked Sendable {
@@ -291,5 +299,7 @@ private final class SaveDuringImportDelegate: NSObject, CoreDataEnsembleDelegate
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, didSaveMergeChangesWith notification: Notification) {}
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] { [] }
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
+    }
 }

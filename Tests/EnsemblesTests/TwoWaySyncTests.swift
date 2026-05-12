@@ -84,7 +84,7 @@ struct TwoWaySyncTests {
     @Test("Concurrent inserts of same object")
     func concurrentInsertsOfSameObject() async throws {
         stack.globalIdentifiersBlock = { objects in
-            objects.map { $0.value(forKey: "name") as? String }
+            objects.map { ($0.value(forKey: "name") as? String) ?? $0.objectID.uriRepresentation().absoluteString }
         }
 
         try await stack.attachStores()

@@ -31,6 +31,17 @@ struct EnsembleContainerTests {
         func cleanup() {
             try? FileManager.default.removeItem(at: rootDir)
         }
+
+        /// Configure a sensible default global-identifier source on a container so attach
+        /// passes the missingGlobalIdentifierSource check. The fixture's test model has no
+        /// Syncable conformances and no `globalIdentifiers` closure by default; callers
+        /// that want to verify behavior beyond identifier provision should still set the
+        /// closure themselves to override this default.
+        func configureGlobalIdentifiers(on container: CoreDataEnsembleContainer) {
+            container.globalIdentifiers = { objects in
+                objects.map { $0.objectID.uriRepresentation().absoluteString }
+            }
+        }
     }
 
     // MARK: - Configuration Tests
@@ -239,6 +250,7 @@ struct EnsembleContainerTests {
             Issue.record("Failed to create container")
             return
         }
+        fixture.configureGlobalIdentifiers(on: container)
 
         #expect(!container.isAttached)
 
@@ -269,6 +281,7 @@ struct EnsembleContainerTests {
             Issue.record("Failed to create container")
             return
         }
+        fixture.configureGlobalIdentifiers(on: container)
 
         await container.sync()
         #expect(container.isAttached)
@@ -303,7 +316,7 @@ struct EnsembleContainerTests {
         nonisolated(unsafe) var callbackInvoked = false
         container.globalIdentifiers = { objects in
             callbackInvoked = true
-            return objects.map { _ in nil }
+            return objects.map { $0.objectID.uriRepresentation().absoluteString }
         }
 
         // Insert an object and save before attaching
@@ -342,6 +355,7 @@ struct EnsembleContainerTests {
             Issue.record("Failed to create container")
             return
         }
+        fixture.configureGlobalIdentifiers(on: container)
 
         // Insert data before attaching
         nonisolated(unsafe) let model = fixture.model

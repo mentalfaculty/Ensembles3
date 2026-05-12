@@ -717,6 +717,10 @@ private final class MergeDelegate: NSObject, CoreDataEnsembleDelegate, @unchecke
             context.mergeChanges(fromContextDidSave: notif)
         }
     }
+
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
+    }
 }
 #endif
 

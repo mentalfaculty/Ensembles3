@@ -12,6 +12,7 @@ struct ActivityNotificationTests {
     let cloudDir: String
     let ensemble: CoreDataEnsemble
     let managedObjectContext: NSManagedObjectContext
+    let stubDelegate: StubGlobalIDDelegate
 
     init() throws {
         let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("ActivityNotificationTests_\(ProcessInfo.processInfo.globallyUniqueString)")
@@ -45,6 +46,9 @@ struct ActivityNotificationTests {
             cloudFileSystem: cloudFS,
             localDataRootDirectoryURL: URL(fileURLWithPath: eventDataRoot)
         )!
+        let stub = StubGlobalIDDelegate()
+        ens.delegate = stub
+        self.stubDelegate = stub
         self.ensemble = ens
     }
 
@@ -170,5 +174,13 @@ struct ActivityNotificationTests {
             try? await ensemble.detachPersistentStore()
         }
         assertActivityNotifications(notifications, expectedActivity: .detaching, expectError: true)
+    }
+}
+
+/// Minimal delegate that satisfies the missingGlobalIdentifierSource configuration check
+/// by returning the objects' storeURIs as identifiers.
+final class StubGlobalIDDelegate: NSObject, CoreDataEnsembleDelegate, @unchecked Sendable {
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }

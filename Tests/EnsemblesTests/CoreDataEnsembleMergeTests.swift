@@ -14,6 +14,10 @@ struct CoreDataEnsembleMergeTests {
     let ensemble2: CoreDataEnsemble
     let context1: NSManagedObjectContext
     let context2: NSManagedObjectContext
+    // Hold strong refs so `ensemble.delegate` (weak) stays alive through attach.
+    // Tests that need to replace the delegate may do so on individual @Test methods.
+    private let stubDelegate1: StubGlobalIDDelegate
+    private let stubDelegate2: StubGlobalIDDelegate
 
     init() async throws {
         let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("CoreDataEnsembleMergeTests_\(ProcessInfo.processInfo.globallyUniqueString)")
@@ -47,6 +51,9 @@ struct CoreDataEnsembleMergeTests {
             cloudFileSystem: cloudFS1,
             localDataRootDirectoryURL: URL(fileURLWithPath: eventDataRoot1)
         )!
+        let stub1 = StubGlobalIDDelegate()
+        ens1.delegate = stub1
+        self.stubDelegate1 = stub1
         self.ensemble1 = ens1
 
         try await ens1.attachPersistentStore()
@@ -71,6 +78,9 @@ struct CoreDataEnsembleMergeTests {
             cloudFileSystem: cloudFS2,
             localDataRootDirectoryURL: URL(fileURLWithPath: eventDataRoot2)
         )!
+        let stub2 = StubGlobalIDDelegate()
+        ens2.delegate = stub2
+        self.stubDelegate2 = stub2
         self.ensemble2 = ens2
 
         try await ens2.attachPersistentStore()
@@ -274,7 +284,9 @@ private final class MergeAbortDelegate: NSObject, CoreDataEnsembleDelegate, @unc
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, didSaveMergeChangesWith notification: Notification) {}
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] { [] }
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
+    }
 }
 
 private final class MergeRepairDelegate: NSObject, CoreDataEnsembleDelegate, @unchecked Sendable {
@@ -322,5 +334,7 @@ private final class MergeRepairDelegate: NSObject, CoreDataEnsembleDelegate, @un
         didSaveRepairMethodWasCalled = true
     }
 
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] { [] }
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
+    }
 }

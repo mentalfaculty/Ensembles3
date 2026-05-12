@@ -305,7 +305,7 @@ private final class BenchmarkDelegate: NSObject, CoreDataEnsembleDelegate, @unch
         }
     }
 
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] {
-        []
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }

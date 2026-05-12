@@ -24,7 +24,7 @@ final class SyncTestStack: NSObject, CoreDataEnsembleDelegate, @unchecked Sendab
     let testModelURL: URL
 
     // Delegate customization hooks
-    var globalIdentifiersBlock: (([NSManagedObject]) -> [String?])?
+    var globalIdentifiersBlock: (([NSManagedObject]) -> [String])?
     var shouldSaveBlock: ((CoreDataEnsemble, NSManagedObjectContext, NSManagedObjectContext) -> Void)?
     var shouldFailMerge = false
 
@@ -143,8 +143,20 @@ final class SyncTestStack: NSObject, CoreDataEnsembleDelegate, @unchecked Sendab
         }
     }
 
-    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String?] {
-        globalIdentifiersBlock?(objects) ?? []
+    func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        if let block = globalIdentifiersBlock {
+            return block(objects)
+        }
+        // Default for tests: derive a non-empty identifier from `name` (when the entity
+        // has that attribute) or fall back to storeURI so attach passes the
+        // missingGlobalIdentifierSource check.
+        return objects.map { obj in
+            if obj.entity.attributesByName["name"] != nil,
+               let name = obj.value(forKey: "name") as? String, !name.isEmpty {
+                return name
+            }
+            return obj.objectID.uriRepresentation().absoluteString
+        }
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, shouldSaveMergedChangesIn savingContext: NSManagedObjectContext, reparationContext: NSManagedObjectContext) -> Bool {

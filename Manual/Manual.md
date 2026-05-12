@@ -530,17 +530,23 @@ If `Syncable` doesn't fit (e.g., the identifier depends on multiple properties),
 func coreDataEnsemble(
     _ ensemble: CoreDataEnsemble,
     globalIdentifiersForManagedObjects objects: [NSManagedObject]
-) -> [String?] {
+) -> [String] {
     objects.map { object in
         if let tag = object as? Tag {
             return tag.name
         }
-        return (object as? Note)?.uniqueID
+        if let note = object as? Note {
+            return note.uniqueID
+        }
+        // Every object must have a stable identifier — the framework no longer
+        // generates substitute identifiers. Fall back to a stable property; never
+        // return an empty string.
+        return object.objectID.uriRepresentation().absoluteString
     }
 }
 ```
 
-Return `nil` for any object that should get a random identifier.
+The framework requires a non-empty identifier for every object. Returning an empty string is a programmer error and will trip a precondition. If you don't have a globalID source configured at all (no delegate method, no `Syncable`, no closure), attach throws `EnsembleError.missingGlobalIdentifierSource`.
 
 ### Identifiers Must Be Unique Per Entity
 
@@ -702,10 +708,10 @@ Called when the ensemble is forced to detach due to an exceptional condition (cl
 func coreDataEnsemble(
     _ ensemble: CoreDataEnsemble,
     globalIdentifiersForManagedObjects objects: [NSManagedObject]
-) -> [String?]
+) -> [String]
 ```
 
-Provides global identifiers for deduplication. Return `nil` for objects that should get random identifiers. See the Quick Start chapter for details.
+Provides global identifiers for cross-device matching. Return a stable, non-empty identifier for every object. The framework no longer generates substitute identifiers — if no source is configured (no delegate method, no `Syncable`, no closure), attach throws `EnsembleError.missingGlobalIdentifierSource`. Empty strings trip a precondition. See the Quick Start chapter for details.
 
 ## Notifications
 
@@ -2249,7 +2255,7 @@ To find out which zone your E2 fleet is on, look at the `CDECloudKitFileSystem` 
 | `CDENodeCloudFileSystem` | (WebDAV) `WebDAVCloudFileSystem` |
 | Completion handler callbacks | `async throws` |
 | `NSMergePolicy` on delegate | `shouldSaveMergedChangesIn` delegate |
-| `CDEPersistentStoreEnsembleDelegate` globalIDs: `[NSObject]` | `[String?]` |
+| `CDEPersistentStoreEnsembleDelegate` globalIDs: `[NSObject]` | `[String]` (non-empty, required) |
 
 ### 5. Update Concurrency Patterns
 

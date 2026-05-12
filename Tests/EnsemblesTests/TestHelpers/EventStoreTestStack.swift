@@ -102,7 +102,7 @@ final class TestEnsemble: EventBuilderEnsembleProtocol, EventIntegratorEnsembleP
     var modelVersionIdentifier: String? { nil }
     var nonCriticalErrorCodes: Set<Int>?
 
-    func globalIdentifiers(forManagedObjects objects: [NSManagedObject]) -> [String?] {
+    func globalIdentifiers(forManagedObjects objects: [NSManagedObject]) -> [String]? {
         objects.map { _ in ProcessInfo.processInfo.globallyUniqueString }
     }
 }

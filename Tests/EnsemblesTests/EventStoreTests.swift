@@ -449,7 +449,7 @@ struct EventStoreTests {
         store.cloudFileSystemIdentityToken = IdentityTokenStandIn("user-record-id-123")
         try store.prepareNewEventStore()
         let storeInfoPath = (store.pathToEventStoreRootDirectory as NSString)
-            .appendingPathComponent("store.plist")
+            .appendingPathComponent("store-metadata.plist")
         store.dismantle()
 
         // Corrupt only the cloudFileSystemIdentity entry of the on-disk plist.
@@ -516,6 +516,77 @@ struct EventStoreTests {
         ]
         #expect(names == expected,
                 "Default allowlist must be exactly Foundation primitives — guards against a regression that re-adds NSObject.self or any backend-specific class to the default")
+    }
+
+    // MARK: - Store Metadata Filename Migration
+
+    @Test("Legacy store.plist is renamed to store-metadata.plist on init")
+    func legacyStorePlistIsRenamed() throws {
+        // Simulate a pre-rename install by pre-creating the legacy file with
+        // the dictionary shape EventStore expects.
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+        let ensembleDir = store.pathToEventStoreRootDirectory
+        store.dismantle()
+
+        let legacyPath = (ensembleDir as NSString).appendingPathComponent("store.plist")
+        let newPath = (ensembleDir as NSString).appendingPathComponent("store-metadata.plist")
+
+        // Move the freshly-written file to the legacy filename, so the next init
+        // looks like a pre-rename installation.
+        try FileManager.default.moveItem(atPath: newPath, toPath: legacyPath)
+        #expect(FileManager.default.fileExists(atPath: legacyPath))
+        #expect(!FileManager.default.fileExists(atPath: newPath))
+
+        // Re-init should rename the legacy file to the new name.
+        let restored = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        #expect(FileManager.default.fileExists(atPath: newPath))
+        #expect(!FileManager.default.fileExists(atPath: legacyPath))
+        #expect(restored.persistentStoreIdentifier != nil,
+                "Metadata should be readable from the renamed file")
+        restored.dismantle()
+    }
+
+    @Test("Rename is skipped when store-metadata.plist already exists")
+    func renameSkippedWhenNewFileExists() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+        let ensembleDir = store.pathToEventStoreRootDirectory
+        store.dismantle()
+
+        let legacyPath = (ensembleDir as NSString).appendingPathComponent("store.plist")
+        let newPath = (ensembleDir as NSString).appendingPathComponent("store-metadata.plist")
+
+        // Plant a legacy file alongside the existing new file with deliberately
+        // different contents so we can detect any clobber.
+        let legacyMarker: NSDictionary = ["marker": "legacy"]
+        legacyMarker.write(toFile: legacyPath, atomically: true)
+        let newMarkerBefore = NSDictionary(contentsOfFile: newPath)
+
+        _ = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)
+
+        let newMarkerAfter = NSDictionary(contentsOfFile: newPath)
+        #expect(newMarkerAfter == newMarkerBefore,
+                "Existing store-metadata.plist must not be clobbered by the migration")
+        #expect(FileManager.default.fileExists(atPath: legacyPath),
+                "Legacy store.plist should be left alone when the new file already exists")
+    }
+
+    @Test("Migration is a no-op when neither file exists")
+    func migrationIsNoOpOnFreshInstall() {
+        // Init against a directory containing nothing — the migration helper
+        // must not create either file on its own. Files are written later by
+        // saveStoreMetadata, not by the migration.
+        let ensembleDir = (rootTestDirectory as NSString).appendingPathComponent("test")
+        try? FileManager.default.createDirectory(atPath: ensembleDir, withIntermediateDirectories: true)
+
+        let store = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)
+        defer { store?.dismantle() }
+
+        let legacyPath = (ensembleDir as NSString).appendingPathComponent("store.plist")
+        let newPath = (ensembleDir as NSString).appendingPathComponent("store-metadata.plist")
+        #expect(!FileManager.default.fileExists(atPath: legacyPath))
+        #expect(!FileManager.default.fileExists(atPath: newPath))
     }
 }
 

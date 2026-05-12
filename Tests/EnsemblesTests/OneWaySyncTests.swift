@@ -254,85 +254,18 @@ struct OneWaySyncTests {
         #expect((bOnDevice2?.value(forKey: "inverseObject") as? NSManagedObject) == cOnDevice2)
     }
 
-    @Test("Initial import with no global identifiers provided")
-    func initialImportWithNoGlobalIdentifiersProvided() async throws {
-        let parent = stack.insertParent(in: stack.context1)
-        let child = stack.insertChild(in: stack.context1)
-        child.setValue(parent, forKey: "parent")
-        stack.save(stack.context1)
-
+    @Test("Attach throws missingGlobalIdentifierSource when no delegate is configured")
+    func attachThrowsWhenNoGlobalIdentifiersProvided() async throws {
+        // The framework no longer auto-generates substitute identifiers. Attaching
+        // without any globalID source must fail loudly. (Replaces earlier
+        // "no global identifiers provided" tests that exercised the old UUID
+        // substitution path.)
         stack.ensemble1.delegate = nil
         stack.ensemble2.delegate = nil
-        try await stack.attachStores()
-        try await stack.syncChanges()
 
-        let parents = stack.fetchParents(in: stack.context2)
-        #expect(parents.count == 1)
-        let children = stack.fetchChildren(in: stack.context2)
-        #expect(children.count == 1)
-
-        let syncedParent = parents.last!
-        let syncedChild = children.last!
-        #expect((syncedParent.value(forKey: "child") as? NSManagedObject) == syncedChild)
-    }
-
-    @Test("Save with no global identifiers provided")
-    func saveWithNoGlobalIdentifiersProvided() async throws {
-        stack.ensemble1.delegate = nil
-        stack.ensemble2.delegate = nil
-        try await stack.attachStores()
-
-        let parent = stack.insertParent(in: stack.context1)
-        let child = stack.insertChild(in: stack.context1)
-        child.setValue(parent, forKey: "parent")
-        stack.save(stack.context1)
-
-        try await stack.syncChanges()
-
-        let parents = stack.fetchParents(in: stack.context2)
-        #expect(parents.count == 1)
-        let children = stack.fetchChildren(in: stack.context2)
-        #expect(children.count == 1)
-
-        let syncedParent = parents.last!
-        let syncedChild = children.last!
-        #expect((syncedParent.value(forKey: "child") as? NSManagedObject) == syncedChild)
-    }
-
-    @Test("Change relationship with no global identifiers provided")
-    func changeRelationshipWithNoGlobalIdentifiersProvided() async throws {
-        stack.ensemble1.delegate = nil
-        stack.ensemble2.delegate = nil
-        try await stack.attachStores()
-
-        let parent = stack.insertParent(in: stack.context1)
-        let child1 = stack.insertChild(in: stack.context1)
-        let child2 = stack.insertChild(in: stack.context1)
-        stack.save(stack.context1)
-
-        child1.setValue(parent, forKey: "parent")
-        stack.save(stack.context1)
-
-        try await stack.syncChanges()
-
-        let parents = stack.fetchParents(in: stack.context2)
-        #expect(parents.count == 1)
-        var children = stack.fetchChildren(in: stack.context2)
-        #expect(children.count == 2)
-
-        let syncedParent = parents.last!
-        let syncedChild = syncedParent.value(forKey: "child") as? NSManagedObject
-        #expect(syncedChild != nil)
-
-        children = children.filter { $0 != syncedChild }
-        let otherChild = children.last!
-        syncedParent.setValue(otherChild, forKey: "child")
-        stack.save(stack.context2)
-
-        try await stack.syncChanges()
-
-        stack.context1.refresh(parent, mergeChanges: false)
-        #expect((parent.value(forKey: "child") as? NSManagedObject) == child2)
+        await #expect(throws: EnsembleError.missingGlobalIdentifierSource) {
+            try await stack.ensemble1.attachPersistentStore()
+        }
     }
 
     @Test("Small data attribute leads to no external data files")

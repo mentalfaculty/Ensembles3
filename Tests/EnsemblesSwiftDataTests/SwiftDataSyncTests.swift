@@ -159,7 +159,7 @@ struct SwiftDataSyncTests {
         let sharedID = "shared-unique-id"
         let stack = SwiftDataSyncTestStack(modelTypes: [SDItem.self])
         stack.globalIdentifiersBlock = { objects in
-            objects.map { $0.value(forKey: "uniqueID") as? String }
+            objects.map { ($0.value(forKey: "uniqueID") as? String) ?? $0.objectID.uriRepresentation().absoluteString }
         }
         try await stack.attachStores()
 
