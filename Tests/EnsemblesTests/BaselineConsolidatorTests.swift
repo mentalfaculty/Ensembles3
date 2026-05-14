@@ -71,7 +71,10 @@ struct BaselineConsolidatorTests {
         let revSet = try setup.eventStore.revisionSet(forEventId: event.id)
         #expect(revSet.revision(forPersistentStoreIdentifier: "123")?.revisionNumber == 0)
         #expect(revSet.revision(forPersistentStoreIdentifier: "234")?.revisionNumber == 2)
-        #expect(event.uniqueIdentifier != nonEmptyUniqueID)
+        // No non-empty *other* baseline was merged in (only an empty placeholder),
+        // so the merged baseline keeps its identifier. Renaming here is the beta.12
+        // wipe regression.
+        #expect(event.uniqueIdentifier == nonEmptyUniqueID)
     }
 
     @Test("Consolidating two empty baselines produces one empty baseline")
@@ -110,7 +113,9 @@ struct BaselineConsolidatorTests {
         let revSet = try setup.eventStore.revisionSet(forEventId: event.id)
         #expect(revSet.revision(forPersistentStoreIdentifier: "123")?.revisionNumber == 2)
         #expect(revSet.revision(forPersistentStoreIdentifier: "234")?.revisionNumber == 0)
-        #expect(event.uniqueIdentifier != mergedBaselineID)
+        // Only an empty placeholder baseline was merged in, so the surviving
+        // baseline keeps its identifier (matches Ensembles 2).
+        #expect(event.uniqueIdentifier == mergedBaselineID)
     }
 
     @Test("Consolidating multiple baselines with multiple stores keeps most recent")
@@ -288,6 +293,34 @@ struct BaselineConsolidatorTests {
 
         let changes = try setup.eventStore.fetchObjectChanges(eventId: event.id)
         #expect(changes.count == 1000)
+    }
+
+    // MARK: - Baseline Identifier Stability (beta.12 wipe regression)
+
+    @Test("Merging a non-empty baseline with an empty placeholder keeps the non-empty identifier")
+    func mergingNonEmptyWithEmptyKeepsIdentifier() async throws {
+        // Regression for the beta.12 E2->E3 migration wipe. The merged baseline must
+        // only be re-identified when a non-empty *other* baseline was actually merged
+        // in. Renaming it whenever more than one baseline exists (including the common
+        // real-baseline + empty-placeholder case) desyncs the local baseline id from
+        // the cloud copy, causing the device to perpetually re-import its own baseline
+        // as type .baselineMissingDependencies — which the consolidator then refuses to
+        // promote — eventually stranding the store with no usable baseline and driving
+        // a full-integration wipe.
+        PropertyChangeValue.registerTransformer()
+        let nonEmptyBaseline = try setup.addBaselineEvents(storeId: "123", globalCounts: [2], revisions: [2]).last!
+        try setup.addBaselineEvents(storeId: "234", globalCounts: [0], revisions: [0])
+
+        let globalId = try setup.eventStore.insertGlobalIdentifier(globalIdentifier: "123", nameOfEntity: "Parent")
+        try setup.objectChange(globalId: globalId, valuesByKey: ["date": NSDate(timeIntervalSince1970: 10)], event: nonEmptyBaseline)
+
+        let originalUniqueID = nonEmptyBaseline.uniqueIdentifier
+
+        try await consolidator.consolidateBaseline()
+
+        let events = try setup.fetchStoreModEvents()
+        #expect(events.count == 1)
+        #expect(events.last?.uniqueIdentifier == originalUniqueID)
     }
 
     @Test("Merging concurrent baselines merges property values")
