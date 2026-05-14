@@ -323,6 +323,40 @@ struct BaselineConsolidatorTests {
         #expect(events.last?.uniqueIdentifier == originalUniqueID)
     }
 
+    @Test("A re-imported baseline produced by the local store is still promoted")
+    func reimportedLocallyProducedBaselineIsPromoted() async throws {
+        // Defense-in-depth for the stuck-sync regression. The consolidator skips
+        // dependency-checking and promotion of baselines "created locally" (whose
+        // event-revision store id matches this store's). But a baseline IMPORTED
+        // from the cloud arrives as `.baselineMissingDependencies` (type 400) — and
+        // if it was originally produced under this store's own id, the skip fires
+        // and it is never promoted to `.baseline` (type 100). It then stays
+        // invisible to `fetchBaselineEvent()`, so integration reports nothing
+        // integrable and sync stalls forever. A type-400 baseline must always be
+        // dependency-checked and promoted, regardless of which store produced it.
+        let baseline = try setup.eventStore.insertEvent(
+            uniqueIdentifier: ProcessInfo.processInfo.globallyUniqueString,
+            type: .baselineMissingDependencies,
+            timestamp: 10,
+            globalCount: 0,
+            modelVersion: "DEFAULT"
+        )
+        // Event-revision store id == this store's own id — the customer's situation,
+        // where the device re-imports a baseline it produced on a prior run.
+        try setup.eventStore.insertRevision(
+            persistentStoreIdentifier: setup.persistentStoreIdentifier,
+            revisionNumber: 0,
+            eventId: baseline.id,
+            isEventRevision: true
+        )
+
+        try await consolidator.consolidateBaseline()
+
+        let promoted = try setup.eventStore.fetchEvent(id: baseline.id)
+        #expect(promoted?.type == .baseline, "Re-imported locally-produced baseline was not promoted from type 400 to type 100")
+        #expect(try setup.eventStore.fetchBaselineEvent() != nil, "Promoted baseline must be visible to fetchBaselineEvent()")
+    }
+
     @Test("Merging concurrent baselines merges property values")
     func mergingConcurrentBaselinesMergesPropertyValues() async throws {
         PropertyChangeValue.registerTransformer()

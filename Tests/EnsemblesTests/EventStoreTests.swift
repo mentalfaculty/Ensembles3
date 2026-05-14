@@ -116,6 +116,51 @@ struct EventStoreTests {
         secondStore.dismantle()
     }
 
+    @Test("Store identifier is discarded when the event database is missing")
+    func storeIdentifierDiscardedWhenDatabaseMissing() throws {
+        // Reproduces the E2->E3 decoupling. E3 renamed the event database file
+        // (events.sqlite -> eventstore.db) with no migrator, but still carries the
+        // id sidecar forward (store.plist -> store-metadata.plist). An E2->E3 update
+        // therefore leaves the id present with no usable event database; E3 then
+        // silently creates a fresh empty one. An EventStore that comes up with an
+        // id but an empty database masquerades as "already attached" and re-imports
+        // its own cloud baseline forever. A live store id must imply a populated
+        // event store — the E2 invariant.
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+        _ = try store.insertEvent(uniqueIdentifier: "evt-1", type: .save)
+        #expect(store.persistentStoreIdentifier != nil)
+        let storeRoot = store.pathToEventStoreRootDirectory
+        store.dismantle()
+
+        // Delete only the event database, leaving store-metadata.plist behind —
+        // exactly the state an E2->E3 app update produces.
+        let dbPath = (storeRoot as NSString).appendingPathComponent("eventstore.db")
+        let metadataPath = (storeRoot as NSString).appendingPathComponent("store-metadata.plist")
+        let legacyPath = (storeRoot as NSString).appendingPathComponent("store.plist")
+        try FileManager.default.removeItem(atPath: dbPath)
+        #expect(FileManager.default.fileExists(atPath: metadataPath), "precondition: the stale sidecar is present")
+
+        let reopened = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        #expect(reopened.persistentStoreIdentifier == nil, "Store id survived an empty/absent event database — install would masquerade as attached")
+        #expect(!reopened.containsEventData)
+
+        // The stale sidecar must be removed from disk — not just cleared in memory —
+        // so the discard is durable across the next launch.
+        #expect(!FileManager.default.fileExists(atPath: metadataPath), "stale store-metadata.plist must be deleted from disk")
+        // E3 → E2 downgrade safety: E2 reads `store.plist`; the discard must not
+        // resurrect one.
+        #expect(!FileManager.default.fileExists(atPath: legacyPath), "discard must not create a store.plist")
+        reopened.dismantle()
+
+        // A second fresh init must also come up un-attached — proving the discard
+        // is durable and not a one-shot in-memory effect.
+        let reopenedAgain = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        #expect(reopenedAgain.persistentStoreIdentifier == nil)
+        #expect(!reopenedAgain.containsEventData)
+        reopenedAgain.dismantle()
+    }
+
     // MARK: - Data File Operations
 
     @Test("Importing data file")
