@@ -15,6 +15,47 @@ struct TwoWaySyncTests {
         stack = SyncTestStack()
     }
 
+    @Test("Two E3 devices in different compatibility modes sync both ways")
+    func mixedCompatibilityModesSync() async throws {
+        // Massimo reported that an E3 device in `.ensembles2Compatible` would not sync
+        // with an E3 device in `.ensembles3`. The code suggests they should: the mode
+        // only restricts *writes* (and only if `compressModelHashes` is on), while
+        // reads handle both formats unconditionally. Worst case: device1 compat-mode,
+        // device2 pure-E3 + `compressModelHashes = true` so the on-the-wire formats
+        // actually differ. They must still sync both ways.
+        stack.ensemble1.compatibilityMode = .ensembles2Compatible
+        stack.ensemble2.compatibilityMode = .ensembles3
+        stack.ensemble2.compressModelHashes = true
+
+        try await stack.attachStores()
+
+        // Device 1 (compat) creates an object, syncs.
+        stack.insertParent(name: "from-compat", in: stack.context1)
+        stack.save(stack.context1)
+        try await stack.syncChanges()
+        #expect(stack.fetchParents(in: stack.context2).count == 1)
+        #expect(stack.fetchParent(named: "from-compat", in: stack.context2) != nil)
+
+        // Device 2 (pure E3 + compressed hashes) creates an object, syncs.
+        stack.insertParent(name: "from-pure", in: stack.context2)
+        stack.save(stack.context2)
+        try await stack.syncChanges()
+        #expect(stack.fetchParents(in: stack.context1).count == 2)
+        #expect(stack.fetchParent(named: "from-pure", in: stack.context1) != nil)
+
+        // Edit on device 1 propagates to device 2.
+        stack.fetchParent(named: "from-compat", in: stack.context1)?.setValue("compat-edited", forKey: "name")
+        stack.save(stack.context1)
+        try await stack.syncChanges()
+        #expect(stack.fetchParent(named: "compat-edited", in: stack.context2) != nil)
+
+        // Edit on device 2 propagates to device 1.
+        stack.fetchParent(named: "from-pure", in: stack.context2)?.setValue("pure-edited", forKey: "name")
+        stack.save(stack.context2)
+        try await stack.syncChanges()
+        #expect(stack.fetchParent(named: "pure-edited", in: stack.context1) != nil)
+    }
+
     @Test("Update attribute on second device")
     func updateAttributeOnSecondDevice() async throws {
         try await stack.attachStores()

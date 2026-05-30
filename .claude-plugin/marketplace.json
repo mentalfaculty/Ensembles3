@@ -1,0 +1,15 @@
+{
+  "name": "ensembles",
+  "owner": {
+    "name": "The Mental Faculty",
+    "email": "info@mentalfaculty.com"
+  },
+  "description": "Claude Code skill for the Ensembles 3 sync framework for Core Data and SwiftData.",
+  "plugins": [
+    {
+      "name": "ensembles",
+      "source": ".",
+      "description": "Brings Claude up to speed on the Ensembles 3 API, E2-to-E3 migration, seed policy, compatibility mode, and transformable-attribute sync issues."
+    }
+  ]
+}

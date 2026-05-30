@@ -219,6 +219,19 @@ The trade-off with any local-first system is that Ensembles is *eventually* cons
 
 # Getting Started
 
+## Develop with Claude Code
+
+If you build with [Claude Code](https://claude.com/claude-code), the quickest way to start is to install the Ensembles skill. It teaches Claude the framework: the API, the cloud backends, Ensembles 2 to 3 migration, the seed policy, compatibility mode, and the handful of things that are easy to get wrong. With it installed, Claude writes correct setup code and diagnoses sync issues without you having to explain how Ensembles works.
+
+Install it once, from the same repository you add as a package dependency:
+
+```
+/plugin marketplace add mentalfaculty/Ensembles3
+/plugin install ensembles@ensembles
+```
+
+The rest of this chapter walks through setup by hand.
+
 ## Installation
 
 Ensembles 3 is distributed as a Swift package. Add it to your Xcode project or `Package.swift`:
@@ -1109,6 +1122,33 @@ This is less of a concern if you're using containers, which handle this automati
 If the app is terminated abruptly (force quit, crash, system kill), any unsaved changes in your context are lost — that's normal Core Data behavior. But what about events that were recorded in the event store but not yet exported to the cloud?
 
 Those events are safe. They're stored in the event store's SQLite database, which is flushed to disk on each write. The next time the app launches and syncs, those events will be exported normally. No data is lost.
+
+## awakeFromInsert and the Integration Context
+
+This one catches people, so it is worth understanding clearly.
+
+When Ensembles integrates changes from another device, it inserts and updates managed objects in a context of its own. Core Data calls `awakeFromInsert()` on those objects exactly as it does for objects your own code inserts. If your `awakeFromInsert()` assigns default content — a fresh location, a timestamp, a status — that code runs during integration too.
+
+Ensembles applies the synced attribute values *after* `awakeFromInsert`, so in the common case a value you set there is correctly overwritten by the synced one. The trap is when your code re-applies current-device content later in the cycle (for example during a merge or reparation step), which can leave the device's own value in place of the synced one. The safe habit is to not assign current-device content during integration at all.
+
+The fix is to make those side effects run only for objects your app creates, by skipping Ensembles' integration context:
+
+```swift
+override func awakeFromInsert() {
+    super.awakeFromInsert()
+
+    // Ensembles is inserting this object to receive synced data — don't
+    // stamp our own defaults over it.
+    guard managedObjectContext?.isEnsemblesIntegrationContext != true else { return }
+
+    if uniqueIdentifier == nil { uniqueIdentifier = UUID().uuidString }
+    if let location = LocationProvider.shared.current { self.location = location }
+}
+```
+
+Assigning a stable global identifier in `awakeFromInsert` (so it is never nil) is fine and recommended — `isEnsemblesIntegrationContext` will be true during integration, but setting the same identifier you would compute anyway does no harm. It is the assignment of *content* attributes — anything sourced from the current device rather than from the object's own synced state — that must be guarded.
+
+`isEnsemblesIntegrationContext` is a property on `NSManagedObjectContext` provided by Ensembles. It returns `true` only for the context Ensembles uses while integrating remote events.
 
 \newpage
 

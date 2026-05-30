@@ -2,7 +2,14 @@
 
 **Local-first sync for Core Data and SwiftData.**
 
+[![Platforms](https://img.shields.io/badge/Platforms-iOS_16%2B_%7C_macOS_13%2B_%7C_tvOS_16%2B_%7C_watchOS_9%2B_%7C_visionOS_1%2B-blue)](https://swiftpackageindex.com/mentalfaculty/Ensembles3)
+[![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138)](https://swiftpackageindex.com/mentalfaculty/Ensembles3)
 [![Documentation](https://img.shields.io/badge/Documentation-DocC-blue)](https://mentalfaculty.github.io/Ensembles3/Ensembles/documentation/ensembles/)
+[![License](https://img.shields.io/badge/License-Commercial-orange)](https://ensembles.io)
+
+> **This package distributes pre-built XCFrameworks (binary only).** Source code is available separately with a [premium license](https://ensembles.io). CloudKit and local backends are free to use; other backends require a license key. See [Licensing](#licensing) below.
+>
+> **Manual:** The complete guide to Ensembles 3 is included in the [`Manual/`](Manual/) directory as PDF, EPUB, and Markdown.
 
 Ensembles is the only [local-first](https://www.inkandswitch.com/local-first/) sync framework for Core Data and SwiftData. Unlike most sync frameworks, it requires no custom server — your data syncs as opaque files through storage your users already have: CloudKit, Google Drive, OneDrive, WebDAV, or any custom backend.
 
@@ -43,7 +50,7 @@ Apple's CloudKit sync is **offline-first**: it works without a network connectio
 
 ## Requirements
 
-- iOS 16+ / macOS 13+ / tvOS 16+ / watchOS 9+
+- iOS 15+ / macOS 12+ / tvOS 15+ / watchOS 8+
 - Swift 5.9+, Xcode 15+
 - SwiftData features require iOS 17+ / macOS 14+
 

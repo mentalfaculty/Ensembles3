@@ -1,0 +1,13 @@
+{
+  "name": "ensembles",
+  "description": "Claude Code skill for the Ensembles 3 sync framework for Core Data and SwiftData. Covers the CoreDataEnsemble/SwiftDataEnsemble API, attach/sync/detach, cloud backends, E2-to-E3 migration, seed policy, compatibility mode, and transformable-attribute sync issues.",
+  "version": "1.0.0",
+  "author": {
+    "name": "The Mental Faculty",
+    "email": "info@mentalfaculty.com"
+  },
+  "homepage": "https://www.ensembles.io",
+  "repository": "https://github.com/mentalfaculty/Ensembles3",
+  "license": "See LICENSE",
+  "keywords": ["ensembles", "core-data", "swiftdata", "sync", "cloudkit", "local-first"]
+}
