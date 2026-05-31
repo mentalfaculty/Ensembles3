@@ -110,6 +110,26 @@ import EnsemblesCloudKit  // or another backend
 | **WebDAV** | `EnsemblesWebDAV` | Any WebDAV server |
 | **Encrypted** | `EnsemblesEncrypted` | Encryption wrapper for any backend |
 
+### Backends that need an external SDK
+
+Five backends are built on third-party SDKs. The binary package ships their XCFrameworks, but a binary XCFramework does **not** bundle its dependencies — you must add the SDK to **your** app, and at a version compatible with the one this release was built against. If your app resolves an incompatible SDK version, linking can fail or break at runtime.
+
+| Backend | Import | Add this package | Built against (3.0.0) |
+|---------|--------|------------------|------------------------|
+| **Dropbox** | `EnsemblesDropbox` | [`SwiftyDropbox`](https://github.com/dropbox/SwiftyDropbox) | `10.2.4` |
+| **S3** | `EnsemblesS3` | [`aws-sdk-swift`](https://github.com/awslabs/aws-sdk-swift) (`AWSS3`) | `1.6.110` |
+| **Box** | `EnsemblesBox` | [`box-ios-sdk`](https://github.com/box/box-ios-sdk) (`BoxSDK`) | `10.9.0` |
+| **Zip** | `EnsemblesZip` | [`ZIPFoundation`](https://github.com/weichsel/ZIPFoundation) | `0.9.20` |
+| **Multipeer** | `EnsemblesMultipeer` | [`ZIPFoundation`](https://github.com/weichsel/ZIPFoundation) | `0.9.20` |
+
+Pin the SDK to the version line above to stay compatible, for example:
+
+```swift
+.package(url: "https://github.com/awslabs/aws-sdk-swift", "1.6.110"..<"1.7.0"),
+```
+
+If you'd rather not manage these SDK versions yourself, use the **source distribution** ([premium](https://ensembles.io)) instead — there, Swift Package Manager resolves each SDK transitively at the correct version, so there is nothing to pin.
+
 ## Quick Start — Core Data
 
 `CoreDataEnsembleContainer` creates a Core Data stack, sets up a delegate, and auto-syncs on save:
