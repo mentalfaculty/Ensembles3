@@ -122,13 +122,13 @@ Five backends are built on third-party SDKs. The binary package ships their XCFr
 | **Zip** | `EnsemblesZip` | [`ZIPFoundation`](https://github.com/weichsel/ZIPFoundation) | `0.9.20` |
 | **Multipeer** | `EnsemblesMultipeer` | [`ZIPFoundation`](https://github.com/weichsel/ZIPFoundation) | `0.9.20` |
 
-Pin the SDK to the version line above to stay compatible, for example:
+The "Built against" column records the version each XCFramework was compiled against. Newer SDK releases generally remain link-compatible, and a **newer SDK line is often required to compile on a newer Xcode** — for example `aws-sdk-swift` 1.7.x builds cleanly on Xcode 27, whereas pinning the older 1.6.x line forces you onto an older Xcode. Prefer an open lower bound so SPM can pick a version compatible with your toolchain:
 
 ```swift
-.package(url: "https://github.com/awslabs/aws-sdk-swift", "1.6.110"..<"1.7.0"),
+.package(url: "https://github.com/awslabs/aws-sdk-swift", from: "1.6.110"),
 ```
 
-If you'd rather not manage these SDK versions yourself, use the **source distribution** ([premium](https://ensembles.io)) instead — there, Swift Package Manager resolves each SDK transitively at the correct version, so there is nothing to pin.
+If a major SDK update introduces breaking API changes, pin to the line you've tested. If you'd rather not manage these SDK versions yourself, use the **source distribution** ([premium](https://ensembles.io)) instead — there, Swift Package Manager resolves each SDK transitively, so there is nothing to pin.
 
 ## Quick Start — Core Data
 
