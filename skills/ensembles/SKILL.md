@@ -28,6 +28,16 @@ try await ensemble.sync()
 
 SwiftData: use `SwiftDataEnsemble` (factory, builds the model from `@Model` types; iOS 17+/macOS 14+).
 
+## Install
+
+Add the Swift package:
+
+```swift
+.package(url: "https://github.com/mentalfaculty/Ensembles3.git", from: "3.0.0")
+```
+
+Then depend on the products you need (`Ensembles`, `EnsemblesCloudKit`, …). This is the binary distribution; CloudKit and local sync are free, other backends need a licence. Premium customers with a source licence use the `Ensembles3-Source` package instead, which also enables package traits for the SDK-backed backends (`Dropbox`, `S3`, `Box`, `Zip`, `Multipeer`).
+
 ## Core API (all async throws)
 
 | Call | Purpose |
@@ -51,18 +61,15 @@ Two cases only — `mergeAllData` (default) and `excludeLocalData`. **Always rec
 
 ## Transformable attributes (e.g. CLLocation)
 
-A transformable attribute "syncing as nil" — one attribute empty/wrong on the receiver while everything else syncs fine — has had several distinct causes. Diagnose:
+If a transformable attribute (e.g. a `CLLocation` stored via a value transformer) arrives nil on the receiving device while the rest of the object syncs fine, check, in order:
 
-1. **E2 base64 line-wrapping (FIXED, but check the build).** Confirmed root cause of a real customer case. Ensembles 2's ObjC exporter base64-encodes blobs in 64-column CRLF-wrapped lines; E3's import used to decode with strict `Data(base64Encoded:)`, which rejects the line breaks and returned nil — dropping the value at import, before the transformer ran. Symptom is exactly "only the transformable (a `["data", base64]` value) nils; plain-string siblings are fine; NO `Failed to retrieve value transformer` log." Affects E2→E3 only (E3 writes unwrapped base64; E2 reads leniently). Fixed by `.ignoreUnknownCharacters` at `JSONEventImport.swift`. If a customer hits this, get them on a build with the fix and retest.
-2. **Transformer not registered on the integrating device.** If `setLoggingLevel(.verbose)` shows `Failed to retrieve value transformer:`, the named transformer wasn't registered before the store loaded. Register a named `@objc(YourName)` `NSSecureUnarchiveFromDataTransformer` subclass (stored class in `allowedTopLevelClasses`) before the CD stack loads, on every device. If that log line is ABSENT, registration is not the cause.
-3. **`awakeFromInsert` overwriting synced content.** A footgun, not the usual cause — see below. Only relevant if the model class assigns current-device content in `awakeFromInsert`.
-4. **Identity / model / cloud data.** global-id/dedup, entity-hash mismatch, or the value genuinely absent from the exported event — verify the raw event on the sending side.
-
-When in doubt, get the actual `.cdeevent` cloud file and inspect what's really in it (do not trust synthetic reproductions — the base64-wrapping bug was invisible to fixtures built with Swift's `base64EncodedString()`).
+1. **Use Ensembles 3.0.0 or later.** Earlier builds could drop a transformable value when migrating from Ensembles 2, because Ensembles 2 writes the value's base64 in line-wrapped form and older E3 builds didn't read it. If you migrated from E2 and see only the transformable attribute coming through nil (plain attributes fine), update to 3.0.0+.
+2. **Register your value transformer before the Core Data stack loads, on every device.** If the named transformer isn't registered when an event is integrated, the attribute decodes to nil. Use a named `@objc(YourTransformerName)` `NSSecureUnarchiveFromDataTransformer` subclass with the stored class in `allowedTopLevelClasses`, and call its registration early (e.g. in `App.init` / `application(_:didFinishLaunching…)`), before you build the container. With `setLoggingLevel(.verbose)`, a `Failed to retrieve value transformer:` line confirms this is the cause.
+3. **Check your `awakeFromInsert`** — see below. If it assigns the attribute from a current-device source, it can overwrite the synced value during integration.
 
 ## awakeFromInsert and the integration context
 
-Ensembles integrates remote events by inserting/updating objects in its own context, and Core Data fires `awakeFromInsert()` on those objects just like for app-created ones. Any default-content assignment in `awakeFromInsert()` (current location, timestamp, status) therefore runs during integration and *can* overwrite a synced value. (Note: the integrator applies synced attributes AFTER `awakeFromInsert`, so a plain assignment is usually re-overwritten correctly — this bites mainly when the content is re-assigned later, e.g. in a reparation/merge step. It is a footgun to rule out, not a common root cause.)
+When Ensembles applies changes synced from another device, it inserts objects into a context of its own, and Core Data calls `awakeFromInsert()` on them just as it does for objects your app creates. If your `awakeFromInsert()` assigns content from the current device (the current location, a timestamp, a status), that assignment can overwrite the value arriving from the other device. Guard it.
 
 Guard current-device content with the public `NSManagedObjectContext.isEnsemblesIntegrationContext` accessor:
 
@@ -81,11 +88,11 @@ Assigning a stable global identifier need not be guarded; guarding content attri
 
 Out of the box (no extra deps): CloudKit, LocalFile, Memory, iCloudDrive (deprecated), GoogleDrive, OneDrive, pCloud, WebDAV, Encrypted, Supabase. Trait-gated (only fetched when the trait is enabled in `Package.swift`): Dropbox, S3, Box, Zip, Multipeer.
 
-Free backends: `CloudKitFileSystem`, `LocalCloudFileSystem`, `MemoryCloudFileSystem`. All others require a license: `EnsemblesLicense.activate("<key>")` before attach (checked in `performAttach`; failure throws `EnsembleError.unlicensed`).
+Free backends: `CloudKitFileSystem`, `LocalCloudFileSystem`, `MemoryCloudFileSystem`. All others require a license: call `EnsemblesLicense.activate("<key>")` before attaching, or attach throws `EnsembleError.unlicensed`.
 
-## Testing
+## Testing your app
 
-Swift Testing (not XCTest). `MemoryCloudFileSystem` is the preferred backend for tests. Sync suites are `@Suite(.serialized)` and `@MainActor` (mainQueue contexts + NotificationCenter cross-talk).
+Use `MemoryCloudFileSystem` as the backend in tests — it's an in-memory cloud, so two ensembles sharing one instance sync without touching CloudKit or the filesystem. Drive a save on one, `sync()` both, and assert the data arrived on the other.
 
 ## Common mistakes
 

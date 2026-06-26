@@ -239,6 +239,54 @@ struct BaselineConsolidatorTests {
         #expect(value.type == PropertyChangeType.attribute.rawValue)
     }
 
+    /// When two baselines hold the same object and the object references an
+    /// external data file (e.g. an image), consolidating them must keep the
+    /// data_files reference on the surviving merged change so the file is not
+    /// garbage-collected. Regression test for images disappearing after a
+    /// baseline consolidation.
+    @Test("Consolidating preserves external data file references")
+    func consolidatingPreservesExternalDataFiles() async throws {
+        PropertyChangeValue.registerTransformer()
+        let baseline0 = try setup.addBaselineEvents(storeId: "123", globalCounts: [10], revisions: [10]).last!
+        let baseline1 = try setup.addBaselineEvents(storeId: "234", globalCounts: [20], revisions: [10]).last!
+
+        let globalId = try setup.eventStore.insertGlobalIdentifier(globalIdentifier: "123", nameOfEntity: "Parent")
+
+        // Both baselines carry a shared attribute so the object change is merged
+        // (the if-branch), and each baseline references a distinct external data
+        // file under its own property name so both must survive the merge.
+        let imageData0 = Data("IMAGE-BASELINE-0".utf8)
+        let filename0 = try #require(setup.eventStore.storeData(inFile: imageData0))
+        var imageChange0 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "imageA")
+        imageChange0.filename = filename0
+        let shared0 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "name", value: .string("zero"))
+        try setup.eventStore.insertObjectChange(type: .insert, nameOfEntity: "Parent", eventId: baseline0.id, globalIdentifierId: globalId.id, propertyChanges: [shared0, imageChange0])
+
+        let imageData1 = Data("IMAGE-BASELINE-1".utf8)
+        let filename1 = try #require(setup.eventStore.storeData(inFile: imageData1))
+        var imageChange1 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "imageB")
+        imageChange1.filename = filename1
+        let shared1 = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "name", value: .string("one"))
+        try setup.eventStore.insertObjectChange(type: .insert, nameOfEntity: "Parent", eventId: baseline1.id, globalIdentifierId: globalId.id, propertyChanges: [shared1, imageChange1])
+
+        try await consolidator.consolidateBaseline()
+
+        let event = try #require(try setup.fetchStoreModEvents().last)
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: event.id)
+        #expect(changes.count == 1)
+        let mergedChange = try #require(changes.first)
+
+        // Both data files must be referenced by the merged change...
+        let referenced = Set(try setup.eventStore.fetchDataFiles(objectChangeId: mergedChange.id).map(\.filename))
+        #expect(referenced.contains(filename0))
+        #expect(referenced.contains(filename1))
+
+        // ...so the cleanup pass must leave both on-disk files intact.
+        try setup.eventStore.removeUnreferencedDataFiles()
+        #expect(setup.eventStore.data(forFile: filename0) != nil)
+        #expect(setup.eventStore.data(forFile: filename1) != nil)
+    }
+
     @Test("Merging concurrent baselines gives low priority to new local baseline")
     func mergingConcurrentBaselinesLowPriorityLocalBaseline() async throws {
         PropertyChangeValue.registerTransformer()

@@ -290,4 +290,82 @@ struct RebaserTests {
         let expectedMoved: [String: String] = ["0": "21", "1": "12", "2": "13"]
         #expect(value.movedIdentifiersByIndex == expectedMoved)
     }
+
+    // MARK: - External Data Files
+
+    /// A baseline insert is updated by a later save event that references an
+    /// external data file (e.g. an image). After rebasing, the merged baseline
+    /// change must keep the data_files reference so the file survives the
+    /// removeUnreferencedDataFiles() cleanup. Regression test for external data
+    /// (images) disappearing after a rebase.
+    @Test("Rebasing preserves external data file references")
+    func rebasingPreservesExternalDataFiles() async throws {
+        PropertyChangeValue.registerTransformer()
+        let baselines = try setup.addEvents(type: .baseline, storeId: setup.persistentStoreIdentifier, globalCounts: [10], revisions: [110])
+        let event1 = try setup.addEvents(type: .save, storeId: setup.persistentStoreIdentifier, globalCounts: [20], revisions: [111]).last!
+        try setup.addEvents(type: .save, storeId: setup.persistentStoreIdentifier, globalCounts: [25], revisions: [112])
+
+        let baseline = baselines.last!
+        let globalId1 = try setup.eventStore.insertGlobalIdentifier(globalIdentifier: "unique", nameOfEntity: "A")
+
+        // Baseline change: a plain attribute, no data file yet.
+        let baselineValue = PropertyChangeValue(type: .attribute, propertyName: "name")
+        baselineValue.value = NSString(string: "before")
+        try setup.eventStore.insertObjectChange(type: .insert, nameOfEntity: "A", eventId: baseline.id, globalIdentifierId: globalId1.id, propertyChanges: [baselineValue.toStoredPropertyChange()])
+
+        // Save event change: the same object gains an external data file (image data).
+        let imageData = Data("PRETEND-IMAGE-BYTES".utf8)
+        let filename = try #require(setup.eventStore.storeData(inFile: imageData))
+        var imageChange = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "image")
+        imageChange.filename = filename
+        try setup.eventStore.insertObjectChange(type: .update, nameOfEntity: "A", eventId: event1.id, globalIdentifierId: globalId1.id, propertyChanges: [imageChange])
+
+        try rebaser.rebase()
+
+        // The merged baseline change should still reference the data file...
+        let rebasedBaseline = try setup.fetchBaseline()!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: rebasedBaseline.id)
+        #expect(changes.count == 1)
+        let mergedChange = try #require(changes.first)
+        let dataFiles = try setup.eventStore.fetchDataFiles(objectChangeId: mergedChange.id)
+        #expect(dataFiles.map(\.filename).contains(filename))
+
+        // ...so the cleanup pass must NOT remove the on-disk file.
+        try setup.eventStore.removeUnreferencedDataFiles()
+        #expect(setup.eventStore.data(forFile: filename) != nil)
+    }
+
+    /// The same object exists in two baselines, and the version being merged in
+    /// carries an external data file. After rebasing both into one baseline, the
+    /// merged change must keep the data_files reference.
+    @Test("Rebasing a new insert carries its external data file references")
+    func rebasingNewInsertCarriesDataFiles() async throws {
+        PropertyChangeValue.registerTransformer()
+        let baselines = try setup.addEvents(type: .baseline, storeId: setup.persistentStoreIdentifier, globalCounts: [10], revisions: [110])
+        let event1 = try setup.addEvents(type: .save, storeId: setup.persistentStoreIdentifier, globalCounts: [20], revisions: [111]).last!
+        try setup.addEvents(type: .save, storeId: setup.persistentStoreIdentifier, globalCounts: [25], revisions: [112])
+
+        let baseline = baselines.last!
+        _ = baseline
+
+        // Object only appears in the save event (no matching baseline change), and
+        // it references an external data file on insert.
+        let globalId1 = try setup.eventStore.insertGlobalIdentifier(globalIdentifier: "newObject", nameOfEntity: "A")
+        let imageData = Data("ANOTHER-IMAGE".utf8)
+        let filename = try #require(setup.eventStore.storeData(inFile: imageData))
+        var imageChange = StoredPropertyChange(type: PropertyChangeType.attribute.rawValue, propertyName: "image")
+        imageChange.filename = filename
+        try setup.eventStore.insertObjectChange(type: .insert, nameOfEntity: "A", eventId: event1.id, globalIdentifierId: globalId1.id, propertyChanges: [imageChange])
+
+        try rebaser.rebase()
+
+        let rebasedBaseline = try setup.fetchBaseline()!
+        let changes = try setup.eventStore.fetchObjectChanges(eventId: rebasedBaseline.id)
+        let mergedChange = try #require(changes.first { $0.globalIdentifierId == globalId1.id })
+        let dataFiles = try setup.eventStore.fetchDataFiles(objectChangeId: mergedChange.id)
+        #expect(dataFiles.map(\.filename).contains(filename))
+
+        try setup.eventStore.removeUnreferencedDataFiles()
+        #expect(setup.eventStore.data(forFile: filename) != nil)
+    }
 }
