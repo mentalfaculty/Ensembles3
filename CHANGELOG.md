@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.3
+
+- **CloudKit: restore Ensembles 2's persistent listing cache.** 3.0.2 fixed relaunch syncs downloading every asset by discarding the change token and refetching the zone's metadata on each launch. 3.0.3 removes that per-launch cost: the listing (file paths, directory flags, sizes) is now persisted alongside the change token in a single all-or-nothing snapshot (`.cdecloudkitcache.v3`), so a relaunch restores the cache and priming fetches only the delta — the Ensembles 2 behavior. The snapshot is invalidated as a unit; any corruption or version mismatch falls back to a clean full metadata refetch. Legacy `.v2` token-only cache files are removed on first use, and downgrading to 3.0.2 remains safe (it simply refetches metadata). Covered by a new unit test suite for the snapshot round-trip, invalidation, and directory rebuild.
+- **Box and OneDrive: request only listing metadata.** Directory listings previously returned full item representations (Box) and full driveItem metadata (OneDrive) for every child. Box listings now pass a `fields` restriction and OneDrive listings a `$select`/`$top` query, shrinking listing responses to the fields the sync actually uses. Follows an audit of all backends for the CloudKit over-fetch bug class; no backend fetches file content during listing, and all paginated listings were confirmed complete.
+
 ## 3.0.2
 
 Rebuilds the binary distribution (the 3.0.1 binaries were unusable), adds Mac Catalyst support to it, and fixes a severe CloudKit performance problem with large stores. Binary users on 3.0.1 should update.

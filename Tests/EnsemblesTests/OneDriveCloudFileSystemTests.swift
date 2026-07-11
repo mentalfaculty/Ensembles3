@@ -31,11 +31,25 @@ struct OneDriveCloudFileSystemTests {
         #expect(url.absoluteString == "https://graph.microsoft.com/v1.0/me/drive/root/children")
     }
 
-    @Test("Children URL for nested path uses colon syntax with /children")
-    func childrenURLForNestedPath() {
+    @Test("Children LISTING URL for root restricts fields and raises page size")
+    func childrenListingURLForRoot() {
+        let fs = OneDriveCloudFileSystem(accessToken: "test")
+        let url = fs.graphURL(forChildrenListingAtPath: "/")
+        #expect(url.absoluteString == "https://graph.microsoft.com/v1.0/me/drive/root/children?$select=name,folder,size&$top=999")
+    }
+
+    @Test("Children URL used by createDirectory stays query-free")
+    func childrenURLQueryFreeForWrites() {
         let fs = OneDriveCloudFileSystem(accessToken: "test")
         let url = fs.graphURL(forChildrenAtPath: "ensembleId/events")
-        #expect(url.absoluteString == "https://graph.microsoft.com/v1.0/me/drive/root:/ensembleId/events:/children")
+        #expect(url.query == nil)
+    }
+
+    @Test("Children listing URL for nested path uses colon syntax with query")
+    func childrenURLForNestedPath() {
+        let fs = OneDriveCloudFileSystem(accessToken: "test")
+        let url = fs.graphURL(forChildrenListingAtPath: "ensembleId/events")
+        #expect(url.absoluteString == "https://graph.microsoft.com/v1.0/me/drive/root:/ensembleId/events:/children?$select=name,folder,size&$top=999")
     }
 
     @Test("Content URL uses colon syntax with /content")
