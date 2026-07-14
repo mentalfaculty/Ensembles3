@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.5
+
+- **Ship `EnsemblesiCloudDrive` in the binary distribution.** The legacy iCloud Drive backend (`ICloudDriveFileSystem`, deprecated — use CloudKit for new projects) existed only in the source distribution: it was added to the package ten days after the binary build tooling was created and was never added to the binary target list, while the documentation described it without qualification. It exists primarily so Ensembles 2 apps that sync via iCloud Drive can migrate to Ensembles 3 against the same cloud data. Now included as an XCFramework (all platforms except watchOS, which the module has never supported). No license key required. Reported by Pascal.
+
 ## 3.0.4
 
 Rebuilds the binary distribution with the current stable Xcode. The framework source is unchanged from 3.0.3; source-distribution users need not update.

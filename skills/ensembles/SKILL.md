@@ -33,7 +33,7 @@ SwiftData: use `SwiftDataEnsemble` (factory, builds the model from `@Model` type
 Add the Swift package:
 
 ```swift
-.package(url: "https://github.com/mentalfaculty/Ensembles3.git", from: "3.0.0")
+.package(url: "https://github.com/mentalfaculty/Ensembles3.git", from: "3.0.4")
 ```
 
 Then depend on the products you need (`Ensembles`, `EnsemblesCloudKit`, …). This is the binary distribution; CloudKit and local sync are free, other backends need a licence. Premium customers with a source licence use the `Ensembles3-Source` package instead, which also enables package traits for the SDK-backed backends (`Dropbox`, `S3`, `Box`, `Zip`, `Multipeer`).
@@ -93,6 +93,12 @@ Free backends: `CloudKitFileSystem`, `LocalCloudFileSystem`, `MemoryCloudFileSys
 ## Testing your app
 
 Use `MemoryCloudFileSystem` as the backend in tests — it's an in-memory cloud, so two ensembles sharing one instance sync without touching CloudKit or the filesystem. Drive a save on one, `sync()` both, and assert the data arrived on the other.
+
+## Troubleshooting
+
+- **Undefined symbols mentioning `CKDatabase` (`_record(for:)`, `_save`, `_recordZone(for:)`), or "unexpected ':' in type" errors from a `.swiftinterface` file, when building against the binary package:** you are on 3.0.2 or 3.0.3, whose binaries were built with a beta toolchain and cannot be consumed from stable Xcode. Update to 3.0.4 or later. The source package never had this problem.
+- **CloudKit sync stalls for minutes right after app launch, and `Library/Caches/CloudKit` grows far larger than the store:** fixed in 3.0.2, and 3.0.3 makes the first sync after a relaunch fast as well (it restores a persisted listing of the zone and fetches only changes). Update to 3.0.3+.
+- **The `.cdecloudkitcache.v3` file in the app's Caches directory** is Ensembles' persisted listing of the CloudKit zone. It is safe to delete — the only effect is one full (metadata-only) refetch on the next sync. Do not delete the event store itself.
 
 ## Common mistakes
 
