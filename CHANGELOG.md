@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.4
+
+Rebuilds the binary distribution with the current stable Xcode. The framework source is unchanged from 3.0.3; source-distribution users need not update.
+
+- **Fix the 3.0.2 and 3.0.3 binaries being unusable from stable Xcode.** Those releases were built with a beta toolchain, which breaks stable-Xcode consumers in two ways: the beta compiler emits `.swiftinterface` files that stable Swift cannot parse (module stability only guarantees that newer compilers read older interfaces, not the reverse), and the beta SDK binds CloudKit's async conveniences to back-deployment symbols that stable SDKs do not define, producing undefined-symbol link errors (`CKDatabase._record(for:)`, `._save`, `._recordZone(for:)`). Reported by Ola Nilsson. The 3.0.4 binaries are built with stable Xcode; forward compatibility covers newer toolchains, so one binary serves all. The release pipeline now refuses beta toolchains without an explicit override and verifies every release by building the distribution test suite against the produced artifacts with the default stable toolchain before publishing.
+
 ## 3.0.3
 
 - **CloudKit: restore Ensembles 2's persistent listing cache.** 3.0.2 fixed relaunch syncs downloading every asset by discarding the change token and refetching the zone's metadata on each launch. 3.0.3 removes that per-launch cost: the listing (file paths, directory flags, sizes) is now persisted alongside the change token in a single all-or-nothing snapshot (`.cdecloudkitcache.v3`), so a relaunch restores the cache and priming fetches only the delta — the Ensembles 2 behavior. The snapshot is invalidated as a unit; any corruption or version mismatch falls back to a clean full metadata refetch. Legacy `.v2` token-only cache files are removed on first use, and downgrading to 3.0.2 remains safe (it simply refetches metadata). Covered by a new unit test suite for the snapshot round-trip, invalidation, and directory rebuild.
