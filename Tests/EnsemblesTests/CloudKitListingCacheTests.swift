@@ -102,4 +102,51 @@ struct CloudKitListingCacheTests {
         let contents = CloudKitListingCache.rebuildContents(from: files, rootDirectory: "/")
         #expect(contents["/"]?["/top"] is CloudDirectory)
     }
+
+    @Test("noteChange matches a rebuild from the same file map")
+    func noteChangeMatchesRebuild() throws {
+        var files: [String: CloudKitListingCache.Entry] = [:]
+        var contents: [String: [String: any CloudItem]] = [:]
+
+        CloudKitListingCache.noteChange(
+            fullPath: "/store/data", isDirectory: true, fileSize: 0,
+            rootDirectory: "/", files: &files, contents: &contents
+        )
+        CloudKitListingCache.noteChange(
+            fullPath: "/store/data/file1.cdeevent", isDirectory: false, fileSize: 1234,
+            rootDirectory: "/", files: &files, contents: &contents
+        )
+        CloudKitListingCache.noteChange(
+            fullPath: "/store/empty", isDirectory: true, fileSize: 0,
+            rootDirectory: "/", files: &files, contents: &contents
+        )
+
+        #expect(files == sampleFiles)
+
+        let rebuilt = CloudKitListingCache.rebuildContents(from: files, rootDirectory: "/")
+        #expect(Set(contents.keys) == Set(rebuilt.keys))
+        for (dir, children) in rebuilt {
+            #expect(Set(contents[dir]?.keys ?? [:].keys) == Set(children.keys))
+        }
+        let file = try #require(contents["/store/data"]?["/store/data/file1.cdeevent"] as? CloudFile)
+        #expect(file.size == 1234)
+        #expect(file.path == "store/data/file1.cdeevent")
+    }
+
+    @Test("noteRemoval detaches the entry from the file map and its parent")
+    func noteRemovalDetachesEntry() {
+        var files = sampleFiles
+        var contents = CloudKitListingCache.rebuildContents(from: files, rootDirectory: "/")
+
+        CloudKitListingCache.noteRemoval(
+            fullPath: "/store/data/file1.cdeevent", files: &files, contents: &contents
+        )
+        #expect(files["/store/data/file1.cdeevent"] == nil)
+        #expect(contents["/store/data"]?.isEmpty == true)
+
+        CloudKitListingCache.noteRemoval(fullPath: "/store/data", files: &files, contents: &contents)
+        #expect(files["/store/data"] == nil)
+        #expect(contents["/store/data"] == nil)
+        #expect(contents["/store"]?.keys.contains("/store/data") == false)
+    }
 }

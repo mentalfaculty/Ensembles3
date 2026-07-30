@@ -202,4 +202,35 @@ struct EventMigratorTests {
             #expect(changes.count == 3)
         }
     }
+
+    @Test("Importing a corrupt event file names the file and both format failures", arguments: [
+        "not json, not sqlite",  // garbage: fails JSON parse and the SQLite header check
+        "",                      // empty: SQLite opens it as a valid empty store, so the failure is "no event found"
+        "[1, 2, 3]",             // valid JSON but not an event dictionary: previously imported as silent success
+    ])
+    func importCorruptEventFileReportsBothFailures(contents: String) async throws {
+        let filename = "0_corrupt\(ProcessInfo.processInfo.globallyUniqueString)_ABCDEF12_1of2.cdeevent"
+        let corruptURL = URL(fileURLWithPath: (NSTemporaryDirectory() as NSString).appendingPathComponent(filename))
+        try Data(contents.utf8).write(to: corruptURL)
+        defer { try? FileManager.default.removeItem(at: corruptURL) }
+
+        let baselineCountBefore = try setup.eventStore.fetchBaselineEvents().count
+        let eventCountBefore = try setup.eventStore.fetchNonBaselineEvents().count
+
+        do {
+            _ = try await migrator.migrateEventIn(from: [corruptURL])
+            Issue.record("Expected import of a corrupt event file to throw")
+        } catch {
+            let nsError = error as NSError
+            #expect(nsError.domain == EnsembleError.errorDomain)
+            #expect(nsError.code == EnsembleError.dataCorruptionDetected.rawValue)
+            #expect(nsError.localizedDescription.contains("1of2.cdeevent"))
+            #expect(nsError.localizedDescription.contains("JSON import:"))
+            #expect(nsError.localizedDescription.contains("Binary store import:"))
+        }
+
+        // The failed import must leave no partial event behind.
+        #expect(try setup.eventStore.fetchBaselineEvents().count == baselineCountBefore)
+        #expect(try setup.eventStore.fetchNonBaselineEvents().count == eventCountBefore)
+    }
 }

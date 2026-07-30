@@ -180,6 +180,28 @@ struct EventStoreTests {
         store.dismantle()
     }
 
+    @Test("Importing a data file that was already imported succeeds and consumes the source")
+    func importingAlreadyImportedDataFile() throws {
+        let store = makeStore()!
+        try store.prepareNewEventStore()
+
+        // Data filenames are content MD5s, so a name collision means identical
+        // content — e.g. a leftover from an earlier aborted sync. The re-import
+        // must succeed rather than fail every subsequent sync on the same move.
+        let name = "fileToReimport_\(ProcessInfo.processInfo.globallyUniqueString)"
+        let firstCopy = (NSTemporaryDirectory() as NSString).appendingPathComponent(name)
+        try "Hi there".write(toFile: firstCopy, atomically: false, encoding: .utf8)
+        #expect(store.importDataFile(atPath: firstCopy))
+
+        let secondCopy = (NSTemporaryDirectory() as NSString).appendingPathComponent(name)
+        try "Hi there".write(toFile: secondCopy, atomically: false, encoding: .utf8)
+        #expect(store.importDataFile(atPath: secondCopy))
+        #expect(!FileManager.default.fileExists(atPath: secondCopy))
+        #expect(store.newlyImportedDataFilenames.contains(name))
+
+        store.dismantle()
+    }
+
     @Test("Exporting data file")
     func exportingDataFile() throws {
         let store = makeStore()!

@@ -1033,6 +1033,34 @@ NotificationCenter.default.addObserver(
 }
 ```
 
+## Detecting Success and Staleness
+
+A common misreading of the activity API: `currentActivity == .none` means only that the ensemble is idle *right now*. It says nothing about whether the last sync succeeded, or whether the device is up to date. A device can be attached, idle, and weeks out of date, all at once.
+
+The reliable signals are the ones tied to a specific sync:
+
+- **`container.sync()` returns a `Bool`.** `true` means that sync completed: changes were imported, integrated, and exported. `false` means it failed, and the error went to `didEncounterError`.
+- **`ensemble.sync()` throws.** If it returns without throwing, that sync succeeded.
+- **`.coreDataEnsembleWillEndActivity`** carries the error (if any) under `EnsembleNotificationKey.activityError`.
+
+To detect a stale device, track the last success yourself:
+
+```swift
+if await container.sync() {
+    UserDefaults.standard.set(Date(), forKey: "lastSuccessfulSync")
+}
+```
+
+If that date is older than you'd expect given your auto-sync policy — say, hours old with a 60-second timer — the device is failing repeatedly, and the errors arriving via `didEncounterError` will tell you why. Most sync errors are transient and clear on the next trigger; a device is only in trouble when the *same* error repeats across many attempts.
+
+## Which Errors Matter
+
+Errors are reported as `EnsembleError` values in the `CDEErrorDomain` domain, and their descriptions name the case and code. A rough triage:
+
+- **Transient, self-healing** — network errors (1000–1002), `saveOccurredDuringMerge` (207), `saveOccurredDuringAttaching` (206), `cancelled` (101). Ignore them; the next sync trigger retries. Alert the user only if they persist for a long stretch.
+- **Configuration problems** — `missingGlobalIdentifierSource` (220), `unknownModelVersion` (204), `unlicensed` (3000). These do not clear on their own; fix the app.
+- **Forced detaches** — `cloudIdentityChanged` (202), `storeUnregistered` (205), `hardwareIdentityChanged` (213), `syncDataWasReset` (2000), `dataCorruptionDetected` (203). The ensemble has detached itself; see *Forced Detaches* in the previous chapter. Containers re-attach automatically on the next sync trigger.
+
 \newpage
 
 # Saving
@@ -1052,6 +1080,36 @@ When a save occurs, the framework:
 3. **Stores the event** — The changes are written to the event store with a timestamp and revision number.
 
 The saved changes don't become available to other devices until the next `sync()`, when they're exported to the cloud.
+
+## When May the App Save?
+
+Saving is safe at almost any time. There is exactly one window where a save causes real trouble, and one where it causes minor churn:
+
+- **During attach, a save aborts the attach.** Attaching imports your entire store into the event store, and a save mid-import would leave that import inconsistent, so the attach is abandoned with `saveOccurredDuringAttaching` (error 206). Nothing is corrupted — the partial state is discarded and the next attach starts fresh — but each retry re-imports the whole store, so an app that saves constantly can keep aborting its own attach forever.
+
+- **During a merge, a save aborts that merge.** The sync retries the merge a couple of times internally (the retry includes the new save's event), and if the retries are exhausted, the merge is abandoned with `saveOccurredDuringMerge` (error 207) and simply runs again on the next sync trigger. This is routine and harmless in moderation; it only becomes a problem if the app saves so often that *every* merge window contains a save, in which case the device never completes a merge and quietly falls behind.
+
+One pattern deserves a specific warning: **saving in response to merged changes**. If a merge-notification handler (`didSaveMergeChanges`, or an observer that rebuilds derived state — user ordering, stylesheets — when imported objects appear) performs a save, then every merge that delivers data provokes a save, and that save aborts the very merge that triggered it. The internal retry absorbs a *purely* reactive app (the second pass delivers nothing new, so no further save occurs and the merge completes), but a handler that saves on every pass defeats it: the device fails every sync while its store slowly fills from the batches each aborted merge had already committed. Prefer deferring reactive writes until the sync completes — queue them, and flush when `sync()` returns or on `.coreDataEnsembleWillEndActivity`.
+
+This reduces to one practical rule:
+
+> **Hold writes until the first successful `sync()` after launch. After that, save freely.**
+
+The first successful sync proves attach is complete. Gating on it is much more dependable than checking `currentActivity` before saving — that check is inherently racy, because a sync can begin between your check and your save. Don't try to make an activity-based gate airtight; it can't be done from outside the framework. Coalescing frequent writes into fewer saves remains good hygiene (see above), because it shrinks the number of merge windows a save can land in, but it is an optimization, not a correctness requirement.
+
+```swift
+// A minimal launch gate
+var canSave = false
+
+Task {
+    while !(await container.sync()) {
+        try await Task.sleep(for: .seconds(5))
+    }
+    canSave = true   // attach is complete; save freely from here on
+}
+```
+
+One caveat for a production version of this gate: a *configuration* error (see *Which Errors Matter* in the Syncing chapter) never clears on its own, so inspect the errors arriving via `didEncounterError` and stop retrying — or open the gate regardless — when the failure is not transient. Holding writes forever because a license key is missing would be worse than the race the gate prevents.
 
 ## The Cost of Saving
 
@@ -2207,6 +2265,32 @@ In debug builds, `.trace` is a good choice. In production, the default `.error` 
 - Consider whether all entities need to sync — use `CDEIgnoredKey` for local-only data.
 - Move large binary data to external files managed separately.
 
+### One Device Is Stale While Others Are Current
+
+**Cause:** Every sync on that device is failing with the same error while the rest of the fleet is healthy. A frequent culprit is the app saving into every merge window (`saveOccurredDuringMerge`, error 207), so no merge ever completes — see *When May the App Save?* in the Saving chapter.
+
+**Fix:** First diagnose: quiesce all writes, enable `.verbose` logging, and run one manual sync. If it succeeds, the app's save timing is the issue. If it still fails, the log will name the real error. To recover the device once the cause is addressed:
+
+1. **Detach and re-attach** (`container.detach()`, then `sync()`). Local data is preserved and re-imported; sync metadata is rebuilt from the cloud. This is the standard remedy and sufficient for almost every case.
+2. **Rebuild from the cloud** — if the device's data is just a stale copy of what the cloud already has, detach, delete the local store files and the local event data directory, recreate the stack, and sync. The device comes back as a clone of the cloud. Any local changes that never synced are lost, so reserve this for devices with nothing unique to keep.
+
+Forcing a rebase is not a recovery tool — it compacts history; it does not repair a failing device.
+
+### Wiping the Cloud and Starting Fresh
+
+**Cause:** You need a coordinated reset — for example, duplicate identities accumulated in the cloud history from devices that attached before global identifiers were configured.
+
+**Fix:** De-duplicate app-side on every device first (two local rows must never share a global identifier), detach all devices, then remove the cloud data from one device:
+
+```swift
+try await CoreDataEnsemble.removeEnsemble(
+    withIdentifier: "MainStore",
+    in: cloudFileSystem
+)
+```
+
+Cloud deletion can take time to propagate (minutes, for CloudKit), so wait before re-attaching. Then attach your best device first, let it seed the cloud (`.mergeAllData`), and bring in the other devices one at a time.
+
 ### Core Data Threading Crashes in Tests
 
 **Cause:** Accessing Core Data contexts from the wrong thread.
@@ -2230,7 +2314,7 @@ Ensembles 3 is fully backward compatible with Ensembles 2 *cloud* data, so exist
 
 The local event store does not carry across. E3 uses a different on-disk database format (raw SQLite vs. E2's Core Data store), and there is no automatic conversion. On the first call to `attachPersistentStore()` after the swap, E3 deletes the existing event-data directory and registers as a fresh peer with the cloud. Your app's persistent store (your own Core Data or SwiftData SQLite) is untouched — only Ensembles' internal event-tracking database is reset.
 
-In practice this means the migrated device is treated like a new peer joining the ensemble: a fresh `persistentStoreIdentifier` is generated, the current baseline is pulled from the cloud, and the user's data ends up consistent with the rest of the ensemble. Local events that hadn't yet synced from E2 are lost, so if that matters for your migration window, sync the E2 build to completion before deploying the E3 build.
+In practice this means the migrated device is treated like a new peer joining the ensemble: a fresh `persistentStoreIdentifier` is generated, the current baseline is pulled from the cloud, and the user's data ends up consistent with the rest of the ensemble. The user's data is not at risk: the attach imports the *entire local store* (with the default `mergeAllData` seed policy) and merges it with the cloud by global identifier, so local changes survive even if the E2 build never uploaded them. The one thing that cannot carry across is an unsynced *deletion* — an object deleted in E2 whose deletion event never reached the cloud no longer exists in the local store, so the re-import cannot know about it, and the object returns from the cloud after migration. If clean deletions matter for your migration window, have the E2 build sync to completion before the upgrade; otherwise migration order doesn't matter.
 
 The first attach after migration also produces a forced detach with `EnsembleError.cloudIdentityChanged` — see step 6 below.
 
@@ -2368,6 +2452,63 @@ ensemble?.compatibilityMode = .ensembles3  // The default
 Or simply remove the `compatibilityMode` parameter from your configuration — `.ensembles3` is the default.
 
 Full E3 mode enables compressed model hashes and any future optimizations that aren't backward compatible with E2.
+
+## Coming from the Idiomatic Sample (IDMSyncManager)
+
+A great many Ensembles 1.x and 2 apps grew out of the old Idiomatic sample, with an `IDMSyncManager` singleton wrapping `CDEPersistentStoreEnsemble`. If that describes your app, a word of warning: the *current* Idiomatic example is a from-scratch SwiftData app, and comparing it to your code will mostly produce confusion. Don't migrate by imitating the new sample — map your existing sync manager's responsibilities onto Ensembles 3, most of which the containers now do for you:
+
+- `+sharedSyncManager` and `setup` become creating one `CoreDataEnsembleContainer` at launch.
+- `connectToSyncService:` (build a file system, then leech) becomes passing the backend to the container; the first `sync()` attaches automatically.
+- `synchronizeWithCompletion:` becomes `container.sync()` — and the auto-sync policy replaces the hand-rolled save, timer, and activation triggers.
+- The `didSaveMergeChangesWithNotification:` delegate method, where `IDMSyncManager` merged changes into the main context, disappears entirely: the container merges into the view context for you.
+- `globalIdentifiersForManagedObjects:` becomes the container's `globalIdentifiers` closure. This one is now *required* — Ensembles 3 refuses to attach without a global identifier source (error 220), where Ensembles 2 tolerated returning nil. Port your existing logic; the identifiers must match what the E2 build supplied, or objects will duplicate.
+- `didDeleechWithError:` becomes the container's `didForceDetach` callback.
+
+If your app used `CDEICloudFileSystem` (the old Idiomatic default), the matching backend is `ICloudDriveFileSystem` in the `EnsemblesiCloudDrive` module. It is deprecated in favor of CloudKit for new apps, but fully supported, free, and reads the same cloud data — which is the whole point during a migration. Don't switch backends mid-migration: a backend is a separate cloud location, so switching resets sync data for your whole fleet. Move to CloudKit later, as its own coordinated transition, if you want it.
+
+These steps apply equally if you are still on the open-source Ensembles 1.x: Ensembles 2 retained Ensembles 1's cloud formats, and Ensembles 3 reads both the same way.
+
+## Migrating an Objective-C App
+
+Ensembles 3 is Swift, with async/await APIs, and cannot be called from Objective-C directly. That does not mean rewriting your app. Keep the app in Objective-C and replace the *internals* of your sync manager with one Swift file that exposes an `@objc` interface, so your existing call sites don't change:
+
+```swift
+import Ensembles
+import EnsemblesiCloudDrive
+
+@objc(IDMSyncManager)
+final class SyncManager: NSObject {
+    @objc static let shared = SyncManager()
+
+    private var container: CoreDataEnsembleContainer?
+
+    @objc func setup(storeURL: URL, modelURL: URL) {
+        let config = EnsembleContainerConfiguration(
+            compatibilityMode: .ensembles2Compatible
+        )
+        container = CoreDataEnsembleContainer(
+            name: "MainStore",
+            storeURL: storeURL,
+            modelURL: modelURL,
+            cloudFileSystem: ICloudDriveFileSystem(),  // default container, E2's data path
+            configuration: config
+        )
+        container?.globalIdentifiers = { objects in
+            // Port your globalIdentifiersForManagedObjects: logic here.
+            objects.map { $0.value(forKey: "uniqueIdentifier") as! String }
+        }
+    }
+
+    @objc func synchronize(completion: @escaping (Bool) -> Void) {
+        Task {
+            let success = await container?.sync() ?? false
+            completion(success)
+        }
+    }
+}
+```
+
+With the default auto-sync policy the explicit `synchronize` call is only needed where your UI wants a completion — the container already syncs on save, on a timer, and when the app becomes active.
 
 \newpage
 

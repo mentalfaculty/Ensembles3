@@ -261,6 +261,51 @@ struct EnsembleContainerTests {
         container.ensemble.dismantle()
     }
 
+    @Test("Concurrent sync calls both succeed without spurious errors")
+    func concurrentSyncCallsBothSucceed() async throws {
+        let fixture = TestFixture()
+        defer { fixture.cleanup() }
+
+        let config = EnsembleContainerConfiguration(
+            autoSyncPolicy: .manual,
+            localDataRootDirectoryURL: fixture.rootDir
+        )
+        guard let container = CoreDataEnsembleContainer(
+            name: "ConcurrentSyncTest",
+            storeURL: fixture.storeURL,
+            managedObjectModel: fixture.model,
+            managedObjectModels: [fixture.model],
+            cloudFileSystem: fixture.cloudFS,
+            configuration: config
+        ) else {
+            Issue.record("Failed to create container")
+            return
+        }
+        fixture.configureGlobalIdentifiers(on: container)
+
+        // Overlapping triggers (save + timer + activation in a real app) must not
+        // surface disallowedStateChange from both racing to attach first. Loop a
+        // few rounds so the losing interleaving — the second attach queued behind
+        // the first — is actually exercised, not just possible.
+        let errorBox = ErrorCollector()
+        container.didEncounterError = { error in errorBox.append(error) }
+
+        for round in 0..<3 {
+            if container.isAttached {
+                try await container.detach()
+            }
+            async let first = container.sync()
+            async let second = container.sync()
+            let results = await [first, second]
+            #expect(results == [true, true], "Round \(round) failed")
+        }
+
+        #expect(errorBox.errors.isEmpty, "Unexpected errors: \(errorBox.errors)")
+        #expect(container.isAttached)
+
+        container.ensemble.dismantle()
+    }
+
     @Test("Detach after attach")
     func detachAfterAttach() async throws {
         let fixture = TestFixture()
@@ -371,5 +416,23 @@ struct EnsembleContainerTests {
         #expect(success)
 
         container.ensemble.dismantle()
+    }
+}
+
+/// Thread-safe error accumulator for container callbacks that may fire off the main actor.
+private final class ErrorCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Error] = []
+
+    func append(_ error: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(error)
+    }
+
+    var errors: [Error] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
     }
 }
