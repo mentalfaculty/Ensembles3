@@ -224,5 +224,15 @@ struct GlobalIdentifierContractTests {
         // Regression: no empty-string row should exist in the new event store.
         let emptyLookup = try store.fetchGlobalIdentifier(globalIdentifier: "", nameOfEntity: "Parent")
         #expect(emptyLookup == nil, "Empty-string row must not be inserted into the new event store")
+
+        // Regression: the exporting device's storeURI must NOT be adopted.
+        // Store URIs are the device-local mapping from global identifier to
+        // row; a foreign URI is meaningless at best, and on a device restored
+        // from another device's backup (matching store UUID) it can resolve to
+        // the wrong object, sending integrated changes to it. Integration
+        // assigns the local URI when it creates the object. (Ensembles 2
+        // adopted foreign URIs implicitly; this is a deliberate deviation.)
+        let migrated = try store.fetchGlobalIdentifier(globalIdentifier: "real-id", nameOfEntity: "Parent")
+        #expect(migrated?.storeURI == nil, "Foreign storeURI must not be adopted on legacy import")
     }
 }

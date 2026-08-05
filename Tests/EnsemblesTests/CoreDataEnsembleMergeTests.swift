@@ -405,6 +405,7 @@ private final class SaveDuringMergeDelegate: NSObject, CoreDataEnsembleDelegate,
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, didSaveMergeChangesWith notification: Notification) {}
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
         objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }
@@ -419,6 +420,7 @@ private final class MergeAbortDelegate: NSObject, CoreDataEnsembleDelegate, @unc
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, didSaveMergeChangesWith notification: Notification) {}
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
         objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }
@@ -469,6 +471,7 @@ private final class MergeRepairDelegate: NSObject, CoreDataEnsembleDelegate, @un
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
         objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }

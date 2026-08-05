@@ -306,6 +306,7 @@ private final class BenchmarkDelegate: NSObject, CoreDataEnsembleDelegate, @unch
     }
 
     func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
+        // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
         objects.map { $0.objectID.uriRepresentation().absoluteString }
     }
 }

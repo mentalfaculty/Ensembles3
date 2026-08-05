@@ -159,6 +159,7 @@ struct SwiftDataSyncTests {
         let sharedID = "shared-unique-id"
         let stack = SwiftDataSyncTestStack(modelTypes: [SDItem.self])
         stack.globalIdentifiersBlock = { objects in
+            // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
             objects.map { ($0.value(forKey: "uniqueID") as? String) ?? $0.objectID.uriRepresentation().absoluteString }
         }
         try await stack.attachStores()

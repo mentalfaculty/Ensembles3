@@ -39,6 +39,7 @@ struct EnsembleContainerTests {
         /// closure themselves to override this default.
         func configureGlobalIdentifiers(on container: CoreDataEnsembleContainer) {
             container.globalIdentifiers = { objects in
+                // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
                 objects.map { $0.objectID.uriRepresentation().absoluteString }
             }
         }
@@ -361,6 +362,7 @@ struct EnsembleContainerTests {
         nonisolated(unsafe) var callbackInvoked = false
         container.globalIdentifiers = { objects in
             callbackInvoked = true
+            // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
             return objects.map { $0.objectID.uriRepresentation().absoluteString }
         }
 

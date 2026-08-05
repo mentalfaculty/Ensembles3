@@ -48,4 +48,21 @@ struct EnsembleErrorTests {
         #expect(nsError.code == 207)
         #expect(nsError.localizedDescription.contains("saveOccurredDuringMerge"))
     }
+
+    @Test("An NSError with CDEErrorDomain does NOT cast back to an EnsembleError case")
+    func nsErrorDoesNotCastBackToCase() {
+        // CustomNSError bridging is one-way: the enum bridges TO NSError, but an
+        // NSError with matching domain and code does not cast back. This is why
+        // failure sites that want to keep `as? EnsembleError` classification
+        // working (in the framework and in apps) must throw the bare enum case
+        // and put diagnostic context in the log, not swap in an enriched
+        // NSError. If a future Swift makes this cast succeed, this test fires
+        // and that design constraint is lifted.
+        let nsError: Error = NSError(
+            domain: EnsembleError.errorDomain,
+            code: EnsembleError.fileAccessFailed.rawValue,
+            userInfo: [NSLocalizedDescriptionKey: "Download failed (HTTP 403)"]
+        )
+        #expect(nsError as? EnsembleError == nil)
+    }
 }

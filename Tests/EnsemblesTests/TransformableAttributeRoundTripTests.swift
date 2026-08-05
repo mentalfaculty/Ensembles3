@@ -238,6 +238,7 @@ final class TransformableAttributeRoundTripTests {
             func coreDataEnsemble(_ ensemble: CoreDataEnsemble, globalIdentifiersForManagedObjects objects: [NSManagedObject]) -> [String] {
                 objects.map { obj in
                     if let name = obj.value(forKey: "name") as? String, !name.isEmpty { return name }
+                    // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
                     return obj.objectID.uriRepresentation().absoluteString
                 }
             }

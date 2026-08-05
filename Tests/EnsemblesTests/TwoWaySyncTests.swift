@@ -125,6 +125,7 @@ struct TwoWaySyncTests {
     @Test("Concurrent inserts of same object")
     func concurrentInsertsOfSameObject() async throws {
         stack.globalIdentifiersBlock = { objects in
+            // Test-only identifier: object URIs never match across devices and are not valid production global identifiers. See "Global Identifiers" in the Manual.
             objects.map { ($0.value(forKey: "name") as? String) ?? $0.objectID.uriRepresentation().absoluteString }
         }
 

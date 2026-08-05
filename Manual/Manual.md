@@ -283,15 +283,15 @@ Each backend is a separate target. You only import what you use — the rest is 
 
 Every submodule re-exports the core `Ensembles` module, so a single import like `import EnsemblesCloudKit` gives you access to everything: `CoreDataEnsemble`, `Syncable`, `CloudFileSystem`, and all the rest.
 
-### Package Traits
+### Package Traits (Source Distribution Only)
 
-The last five targets in the table above (Dropbox, S3, Box, Zip, Multipeer) depend on external packages. To avoid downloading those dependencies when you don't need them, they're gated behind Swift Package Manager *traits* (SE-0450, Swift 6.1+).
+The last five targets in the table above (Dropbox, S3, Box, Zip, Multipeer) depend on external packages. In the *source distribution* (available with a source licence), those dependencies are gated behind Swift Package Manager *traits* (SE-0450, Swift 6.1+), so they aren't downloaded unless you ask for them.
 
 To enable a trait:
 
 ```swift
 .package(
-    url: "https://github.com/mentalfaculty/Ensembles3",
+    url: sourcePackageURL,  // provided with your source licence
     from: "3.0.0",
     traits: ["Dropbox", "Zip"]
 )
@@ -299,11 +299,13 @@ To enable a trait:
 
 If you don't specify any traits, only the core targets (no external dependencies) are available.
 
+The standard *binary distribution* (`mentalfaculty/Ensembles3`) has no traits, and none are needed: its manifest declares no external dependencies to gate. Every backend ships as a prebuilt XCFramework, and the frameworks you don't import cost you nothing. For the SDK-backed backends (Dropbox, S3, Box, Zip, Multipeer), you add the corresponding SDK to your own app — see the README's "Backends that need an external SDK" table for the versions each release was built against.
+
 ### Platform Requirements
 
 Ensembles 3 supports iOS 15+, macOS 12+, tvOS 15+, and watchOS 8+. SwiftData support requires iOS 17+ / macOS 14+ / tvOS 17+ / watchOS 10+.
 
-The package requires Swift 6.1+ for traits. Swift 6.0+ is sufficient for strict concurrency if you don't use trait-gated targets.
+The source distribution requires Swift 6.1+ for traits; Swift 6.0+ is sufficient for strict concurrency if you don't use trait-gated targets. The binary distribution's manifest supports older tools versions (5.9+).
 
 ## Example Apps
 
@@ -523,7 +525,20 @@ class Tag: Syncable {
 }
 ```
 
-The ensemble discovers `Syncable` conformances automatically at initialization — no registration needed.
+The containers discover `Syncable` conformances automatically at initialization — no registration needed.
+
+If you use `CoreDataEnsemble` directly rather than through a container, the delegate method is still required (attach must fail loudly when no identifier source is configured at all), but it can forward to `Syncable` in one line:
+
+```swift
+func coreDataEnsemble(
+    _ ensemble: CoreDataEnsemble,
+    globalIdentifiersForManagedObjects objects: [NSManagedObject]
+) -> [String] {
+    ensemble.syncableGlobalIdentifiers(forManagedObjects: objects)
+}
+```
+
+The helper resolves every object through its entity's `Syncable` conformance, using the same mechanism as the containers. If any object's entity has no conformance, the whole batch fails closed: an empty array is returned, the cause is logged at error level, and that save's changes are not recorded for sync. Treat those log lines as configuration errors to fix. Note that a custom delegate is presumed to be an identifier source, so a forwarding delegate bypasses the attach-time error 220 check; to keep that loud failure, implement `hasGlobalIdentifierSource` on your delegate by returning the ensemble's `hasSyncableConformances`.
 
 ### Choosing Identifiers
 
@@ -551,10 +566,15 @@ func coreDataEnsemble(
         if let note = object as? Note {
             return note.uniqueID
         }
-        // Every object must have a stable identifier — the framework no longer
-        // generates substitute identifiers. Fall back to a stable property; never
-        // return an empty string.
-        return object.objectID.uriRepresentation().absoluteString
+        // Every entity needs a stable stored identifier, such as a UUID
+        // assigned at creation. Do NOT fall back to objectID URIs: they never
+        // match across devices, and a store migration or restore changes them
+        // locally, so peers reinterpret existing objects as new ones. Treat a
+        // missing identifier as a model bug, not a fallback case.
+        guard let id = object.value(forKey: "uniqueID") as? String, !id.isEmpty else {
+            fatalError("Missing unique identifier for \(object.entity.name ?? "?")")
+        }
+        return id
     }
 }
 ```
@@ -1216,6 +1236,10 @@ Not all data models sync equally well. Some patterns that work fine in a single-
 
 ## Designing for Sync
 
+### SwiftData: Avoid Optional Codable Properties
+
+SwiftData stores optional `Codable` properties, a common case being an optional enum like `var status: SubmissionStatus?`, as composite transformable payloads rather than plain attributes. Those payloads do not round-trip reliably through sync integration: they can surface as key-value coding failures for the property's key during a merge. For synced models, store the raw value (`String` or `Int`) and expose the enum as a computed property. The persisted attribute stays a plain value, which syncs exactly. (Reported from the field by a production SwiftData app.)
+
 ### Avoid Cross-Attribute Invariants
 
 If two attributes must satisfy an invariant — say, `startDate` must be before `endDate` — concurrent changes to those attributes on different devices can violate it. Device A changes `startDate` to March 15. Device B changes `endDate` to March 10. After sync, you have `startDate = March 15` and `endDate = March 10`. Neither change was wrong in isolation, but the combination is invalid.
@@ -1840,6 +1864,8 @@ import EnsemblesDropbox
 
 let cloudFS = DropboxCloudFileSystem(...)
 ```
+
+The backend long-polls Dropbox for remote changes and calls the delegate's `dropboxCloudFileSystemDidDetectRemoteFileChanges` when the sync data changes — a good moment to call `sync()`. Monitoring starts automatically when the file system connects; `startMonitoringRemoteChanges()` and `stopMonitoringRemoteChanges()` give manual control. The callback can also fire after this device's own uploads; an extra `sync()` in response is harmless.
 
 ## Amazon S3
 

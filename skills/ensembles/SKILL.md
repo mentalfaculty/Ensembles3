@@ -36,7 +36,7 @@ Add the Swift package:
 .package(url: "https://github.com/mentalfaculty/Ensembles3.git", from: "3.0.4")
 ```
 
-Then depend on the products you need (`Ensembles`, `EnsemblesCloudKit`, …). This is the binary distribution; CloudKit and local sync are free, other backends need a licence. Premium customers with a source licence use the `Ensembles3-Source` package instead, which also enables package traits for the SDK-backed backends (`Dropbox`, `S3`, `Box`, `Zip`, `Multipeer`).
+Then depend on the products you need (`Ensembles`, `EnsemblesCloudKit`, …). This is the binary distribution; CloudKit and local sync are free, other backends need a licence. Premium customers with a source licence use the private source package instead (URL provided with the licence), which also enables package traits for the SDK-backed backends (`Dropbox`, `S3`, `Box`, `Zip`, `Multipeer`).
 
 ## Core API (all async throws)
 
