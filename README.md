@@ -168,7 +168,7 @@ Platforms: iOS 15+ / macOS 12+ / tvOS 15+ / watchOS 8+ / visionOS 1+.
 ### Xcode
 
 1. Select _Add Package Dependencies..._ from the _File_ menu
-2. Enter `https://github.com/mentalfaculty/Ensembles3` (or the source URL above)
+2. Enter `https://github.com/mentalfaculty/Ensembles3` (or your source-distribution URL)
 3. Add the products you need (e.g. `Ensembles`, `EnsemblesCloudKit`)
 
 ### Package.swift
@@ -218,7 +218,7 @@ If you use the [binary distribution](https://github.com/mentalfaculty/Ensembles3
 
 With the source distribution, enabling a package trait resolves the external dependency automatically via SPM — no extra steps needed.
 
-If a major SDK update introduces breaking API changes, pin to the line you have tested. If you would rather not manage these SDK versions yourself, use the [source distribution](https://ensembles.io) instead; there, Swift Package Manager resolves each SDK transitively, so there is nothing to pin.
+If a major SDK update introduces breaking API changes, pin to the line you have tested. This release was built against SwiftyDropbox 10.2.4, aws-sdk-swift 1.6.106, box-ios-sdk 10.8.0, and ZIPFoundation 0.9.20. If you would rather not manage these SDK versions yourself, use the [source distribution](https://ensembles.io) instead; there, Swift Package Manager resolves each SDK transitively, so there is nothing to pin.
 
 ## Develop with Claude Code
 

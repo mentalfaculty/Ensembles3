@@ -299,7 +299,7 @@ To enable a trait:
 
 If you don't specify any traits, only the core targets (no external dependencies) are available.
 
-The standard *binary distribution* (`mentalfaculty/Ensembles3`) has no traits, and none are needed: its manifest declares no external dependencies to gate. Every backend ships as a prebuilt XCFramework, and the frameworks you don't import cost you nothing. For the SDK-backed backends (Dropbox, S3, Box, Zip, Multipeer), you add the corresponding SDK to your own app — see the README's "Backends that need an external SDK" table for the versions each release was built against.
+The standard *binary distribution* (`mentalfaculty/Ensembles3`) has no traits, and none are needed: its manifest declares no external dependencies to gate. Every backend ships as a prebuilt XCFramework, and the frameworks you don't import cost you nothing. For the SDK-backed backends (Dropbox, S3, Box, Zip, Multipeer), you add the corresponding SDK to your own app — see the README's "Binary Distribution" section for the SDK each backend needs and the versions each release was built against.
 
 ### Platform Requirements
 
@@ -1915,7 +1915,7 @@ A wrapper that encrypts all data before passing it to another backend. See the E
 
 ## Zip
 
-A wrapper that compresses cloud files using ZIP compression. Useful for backends with limited storage or slow upload speeds.
+A wrapper that compresses cloud files using ZIP compression. Useful for backends with limited storage or slow upload speeds. If you are migrating from Ensembles 2 and old devices remain in the field, use this wrapper only when every Ensembles 2 build wraps its file system in `CDEZipCloudFileSystem` (the formats are interchangeable). An Ensembles 2 device without the zip layer cannot parse compressed files, and its sync breaks with Core Data validation errors.
 
 ```swift
 // Package.swift — requires trait
@@ -2032,8 +2032,21 @@ public protocol CloudFileSystemSetup: CloudFileSystem {
     func primeForActivity() async throws
     func directoryExists(atPath path: String) async throws -> Bool
     func repairEnsembleDirectory(atPath path: String) async throws
+    func setLocalStoreDirectory(_ path: String?, discardingExistingCache: Bool)
 }
 ```
+
+`setLocalStoreDirectory(_:discardingExistingCache:)` has a default no-op implementation, so you only need it if your backend caches remote state.
+
+## Caching Remote State
+
+If your backend fetches changes incrementally, keeping a cursor, change token, or cached listing between launches, store that state in the directory handed to you by `setLocalStoreDirectory(_:discardingExistingCache:)`. That directory belongs to the event store.
+
+The reason is lifetime, and it is worth being precise about, because getting it wrong produces one of the nastiest failure modes in a sync system. A cache describes one event store at one moment in its history. Store it somewhere with a lifetime of its own, such as the system caches directory, and it can outlive the store it describes. Deleting the app, removing the local store, or resetting the cloud data leaves the cache behind. The next launch then resumes an incremental fetch from a cursor that no longer corresponds to the cloud, and the server answers, quite truthfully, that nothing has changed since that cursor. Files that predate it are never mentioned again.
+
+The device is now working from a partial view of the cloud, and nothing about that looks like an error. It syncs, it reports success, and it quietly never sees some of the data. Failures that announce themselves are much easier to live with.
+
+Keeping the cache inside the event store directory removes the problem by construction. Remove the store and the cache goes with it, so a rebuilt store always begins with a full fetch. Three rules follow: drop any in-memory cache when the directory changes, so state never leaks from one store to another; delete any cache you find when `discardingExistingCache` is `true`, which is how the framework tells you the store is being rebuilt; and never recreate the directory in order to write a cache. If the directory is gone, the store is gone, and the cache has no business surviving it.
 
 ## Starting Points
 
@@ -2078,7 +2091,7 @@ Ensembles supports two encryption formats:
 
 **Modern (default)** — AES-256-GCM with PBKDF2 key derivation. This is the recommended format for new apps.
 
-**Legacy** — Compatible with Ensembles 2's `CDEEncryptedCloudFileSystem`, which used RNCryptor v3. Use this only for backward compatibility with E2 peers:
+**Legacy** — Compatible with Ensembles 2's `CDEEncryptedCloudFileSystem`, which used RNCryptor v3. Use this only for backward compatibility with E2 peers. In a mixed fleet, every Ensembles 2 device must be using `CDEEncryptedCloudFileSystem`, and every Ensembles 3 device must write the legacy format, because Ensembles 2 cannot read the modern format:
 
 ```swift
 let cloudFS = EncryptedCloudFileSystem(
