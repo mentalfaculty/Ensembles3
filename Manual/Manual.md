@@ -1078,8 +1078,10 @@ If that date is older than you'd expect given your auto-sync policy — say, hou
 Errors are reported as `EnsembleError` values in the `CDEErrorDomain` domain, and their descriptions name the case and code. A rough triage:
 
 - **Transient, self-healing** — network errors (1000–1002), `saveOccurredDuringMerge` (207), `saveOccurredDuringAttaching` (206), `cancelled` (101). Ignore them; the next sync trigger retries. Alert the user only if they persist for a long stretch.
+- **Informative, not failures** — `missingDataFiles` (210) appears in `nonCriticalErrorCodes` when events were held back because their data files have not yet arrived. The sync itself succeeded, and the files usually come down on a later sync. Investigate only if it persists across many syncs — that suggests the producing device stopped participating before uploading them.
 - **Configuration problems** — `missingGlobalIdentifierSource` (220), `unknownModelVersion` (204), `unlicensed` (3000). These do not clear on their own; fix the app.
 - **Forced detaches** — `cloudIdentityChanged` (202), `storeUnregistered` (205), `hardwareIdentityChanged` (213), `syncDataWasReset` (2000), `dataCorruptionDetected` (203). The ensemble has detached itself; see *Forced Detaches* in the previous chapter. Containers re-attach automatically on the next sync trigger.
+- **Permanent and recurring** — `corruptEventContent` (222). A cloud event file parsed correctly but its content is invalid (for example, a multipart baseline whose parts contain no changes), and nothing was imported from it. Because the corrupt file remains in the cloud, every sync fails the same way until it is dealt with. This code should be rare; if you see it, contact support with the error text — the remedy is usually a coordinated cloud reset (see *Wiping the Cloud and Starting Fresh*).
 
 \newpage
 
@@ -1994,6 +1996,8 @@ Let me walk through each:
 
 **`fileExists(atPath:)`** — Returns a `FileExistence` value indicating whether a file or directory exists at the given path. Paths are relative to the ensemble's root directory.
 
+There is also one optional method, `confirmFileExists(atPath:)`, whose default implementation simply calls `fileExists(atPath:)`. Ensembles uses it for checks with drastic consequences, such as the per-sync registration check that detects a reset cloud. If your backend answers `fileExists` from a local cache of remote state, implement `confirmFileExists` to ask the server directly; if `fileExists` is already authoritative, ignore it. One caveat for wrapper backends that delegate to another file system: forward `confirmFileExists` to the wrapped backend's `confirmFileExists` explicitly, as the built-in Encrypted and Zip wrappers do — the default cannot see through a wrapper.
+
 **`createDirectory(atPath:)`** — Creates a directory at the given path. Should be idempotent — creating an existing directory is not an error.
 
 **`contentsOfDirectory(atPath:)`** — Returns the immediate children of a directory as `CloudItem` instances (`CloudFile` or `CloudDirectory`).
@@ -2329,6 +2333,33 @@ try await CoreDataEnsemble.removeEnsemble(
 ```
 
 Cloud deletion can take time to propagate (minutes, for CloudKit), so wait before re-attaching. Then attach your best device first, let it seed the cloud (`.mergeAllData`), and bring in the other devices one at a time.
+
+### Deleting a CloudKit Zone Outside the Framework
+
+**Cause:** The cloud was reset by deleting the CloudKit zone itself — in the CloudKit Console, with your own CloudKit code, or by the user removing the app's iCloud data in Settings — rather than with `removeEnsemble`.
+
+**Fix:** Treat any zone deletion as a full cloud reset. `removeEnsemble` deletes records *through* the framework, so its own bookkeeping follows along. A zone deleted behind the framework's back is invisible to it: every device that ever synced with that zone still holds sync metadata, cached listings, and a server change token that describe a cloud which no longer exists. After such a deletion:
+
+1. Detach and re-attach **every** attached device, not just the one you used for the deletion.
+2. Discard any `CloudKitFileSystem` instance your app was holding and create a fresh one. The instance is bound to the zone incarnation it was primed against; its in-memory listing and change token do not survive the zone.
+
+The framework defends itself where it can — a change token the server no longer accepts causes the listing to be discarded and refetched from scratch, and each sync confirms the device's registration directly with the server, forcing a clean detach if the cloud was reset — but those defenses engage on the *next* sync. Prefer `removeEnsemble` for resets you control.
+
+One more caution: deleting an app's iCloud data from the Settings app is lazy — it can take hours to take effect server-side. Don't rebuild the cloud until the deletion has actually landed, or the old and new contents can interleave.
+
+### CloudKit's Moving Parts
+
+Some CloudKit behavior looks like an Ensembles bug and is not. It helps to know that CloudKit is not one store but several loosely coupled ones, kept in sync with each other asynchronously:
+
+- **The record store** answers direct fetches by record ID. It is the most authoritative view.
+- **The query indexes** answer `CKQuery` searches. They are updated separately, and they lag. A query can report a record that a direct fetch says does not exist, and a record that certainly exists can be invisible to queries for a while.
+- **The zone change log** answers incremental "what changed since this token" fetches. It is a third structure with its own cursoring.
+
+Transient disagreements between these views are normal, particularly in the period after large operations such as a cloud wipe or zone deletion. They resolve themselves. If a sync fails with a complaint about a record that plainly exists (or the reverse), let the periodic sync timer retry before treating it as a real fault.
+
+This is also why manual deletion through the CloudKit Console or the Settings app makes such a mess: while the deletion grinds through those structures, the views disagree with each other for an extended window, and anything syncing during that window can pick up an incoherent picture of the cloud. Reset through `removeEnsemble` instead wherever possible, and if a zone was deleted by hand, wait until the dust has settled before rebuilding.
+
+Finally, the device itself has a layer below your app: the CloudKit system daemon keeps its own cache, outside the app's container. Deleting the app, resetting the event store, or clearing every cache Ensembles owns does not touch it. On the rare device that stays wedged — persistently slow downloads, or state that no app-level reset explains — signing out of iCloud and back in resets that daemon cache, and is sometimes the only thing that does.
 
 ### Core Data Threading Crashes in Tests
 

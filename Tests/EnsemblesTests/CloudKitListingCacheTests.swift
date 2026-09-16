@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CloudKit
 @_spi(Testing) import EnsemblesCloudKit
 
 @Suite("CloudKitListingCache")
@@ -16,6 +17,27 @@ struct CloudKitListingCacheTests {
             "/store/data/file1.cdeevent": .init(isDirectory: false, fileSize: 1234),
             "/store/empty": .init(isDirectory: true, fileSize: 0),
         ]
+    }
+
+    @Test("Invalid-cursor errors require a cache discard; other errors do not")
+    func errorClassificationForCacheDiscard() {
+        // The change token is only valid for the zone incarnation that minted it.
+        // CloudKit's invalid-cursor errors mean the cursor (and so the whole
+        // token+listing pair) must be discarded — memory and disk — and the zone
+        // re-enumerated from scratch. Transient failures must NOT discard: the
+        // persisted pair is still internally consistent and resuming from it is
+        // correct, while discarding on every network blip would cause full
+        // metadata refetch storms on a flaky connection.
+        #expect(CloudKitListingCache.errorRequiresCacheDiscard(CKError(.changeTokenExpired)))
+        #expect(CloudKitListingCache.errorRequiresCacheDiscard(CKError(.zoneNotFound)))
+        #expect(CloudKitListingCache.errorRequiresCacheDiscard(CKError(.userDeletedZone)))
+
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(CKError(.networkFailure)))
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(CKError(.networkUnavailable)))
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(CKError(.serviceUnavailable)))
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(CKError(.requestRateLimited)))
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(CKError(.notAuthenticated)))
+        #expect(!CloudKitListingCache.errorRequiresCacheDiscard(EnsembleError.networkError))
     }
 
     @Test("Round-trip preserves snapshot")

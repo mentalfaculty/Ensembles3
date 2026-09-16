@@ -341,4 +341,123 @@ struct CloudManagerTests {
         #expect(sorted[1] == "9_store1_3")
         #expect(sorted[2] == "10_store1_0")
     }
+
+    // MARK: - Download Staging
+
+    @Test("Stale staging is cleared before downloading, so no-overwrite backends cannot wedge")
+    func staleStagingIsClearedBeforeDownload() async throws {
+        // Regression pin for existing behavior (transferRemoteFiles clears the
+        // download directory before downloading): interrupted sessions and crashes
+        // leave staged files behind, and CloudKit's asset copy refuses to overwrite
+        // an existing destination. Without the pre-clean, one stale file would fail
+        // that download with "already exists" on every subsequent sync. This
+        // protection is per-process by nature; concurrent processes interleaving
+        // clean-and-download cycles can still collide, which is one of the reasons
+        // two processes must never share an event store.
+        let fs = ExistenceSpyFileSystem()
+        fs.refusesToOverwriteDownloads = true
+        let cm = CloudManager(eventStore: setup.eventStore, cloudFileSystem: fs, managedObjectModel: setup.testModel!)
+        try await cm.createRemoteDirectoryStructure()
+
+        // A remote event awaiting download.
+        let uid = ProcessInfo.processInfo.globallyUniqueString
+        let filename = "7_remoteStore_3.cdeevent"
+        let json = """
+        {"uniqueIdentifier": "\(uid)", "type": 200, "globalCount": 7, "timestamp": "5", \
+        "storeIdentifier": "remoteStore", "revisionsByStoreIdentifier": {"remoteStore": 3}, \
+        "changesByEntity": {}}
+        """
+        let tempFile = NSTemporaryDirectory() + "/" + filename
+        try Data(json.utf8).write(to: URL(fileURLWithPath: tempFile))
+        defer { try? FileManager.default.removeItem(atPath: tempFile) }
+        try await fs.uploadLocalFile(atPath: tempFile, toPath: "/\(ensembleId)/events/\(filename)")
+
+        // A stale copy already sits at the staging destination.
+        let downloadDir = setup.eventStore.pathToEventDataRootDirectory
+            + "/transitcache/\(setup.eventStore.ensembleIdentifier)/download"
+        try FileManager.default.createDirectory(atPath: downloadDir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: downloadDir + "/" + filename, contents: Data("stale".utf8))
+
+        try await cm.snapshotRemoteFiles()
+        try await cm.importNewRemoteNonBaselineEvents()
+
+        #expect(try setup.eventStore.eventExists(uniqueIdentifier: uid))
+    }
+
+    // MARK: - Registration Check
+
+    @Test("Registration check consults the authoritative store, not a cached listing")
+    func registrationCheckUsesConfirmedExistence() async throws {
+        // The store-registration sentinel is how a device learns its cloud was reset.
+        // A backend's listing cache can be stale in exactly that case, so the check
+        // must go through `confirmFileExists`, which backends answer from the
+        // authoritative store, never from a cache.
+        let spy = ExistenceSpyFileSystem()
+        let cm = CloudManager(eventStore: setup.eventStore, cloudFileSystem: spy, managedObjectModel: setup.testModel!)
+
+        let exists = try await cm.checkExistenceOfRegistrationInfo(forStoreWithIdentifier: "storeX")
+        #expect(!exists)
+        #expect(spy.confirmFileExistsPaths.count == 1)
+        #expect(spy.confirmFileExistsPaths.first?.hasSuffix("/stores/storeX") == true)
+        #expect(spy.fileExistsPaths.isEmpty)
+    }
+}
+
+/// Delegates to a `MemoryCloudFileSystem` while recording which existence check the
+/// framework used, so tests can pin drastic checks to the confirmed variant.
+/// Internal rather than private: the wrapper backends' forwarding tests reuse it.
+final class ExistenceSpyFileSystem: CloudFileSystem, @unchecked Sendable {
+    let inner = MemoryCloudFileSystem()
+    var fileExistsPaths: [String] = []
+    var confirmFileExistsPaths: [String] = []
+
+    /// When true, `downloadFile` refuses to overwrite an existing destination the
+    /// way CloudKit's asset copy does (NSCocoaErrorDomain 516), so tests can prove
+    /// staging must be cleared before download rather than relying on overwrite.
+    var refusesToOverwriteDownloads = false
+
+    var isConnected: Bool { true }
+
+    func fetchUserIdentity() async throws -> sending (any NSObjectProtocol & NSCoding & NSCopying)? {
+        try await inner.fetchUserIdentity()
+    }
+
+    func connect() async throws {
+        try await inner.connect()
+    }
+
+    func fileExists(atPath path: String) async throws -> FileExistence {
+        fileExistsPaths.append(path)
+        return try await inner.fileExists(atPath: path)
+    }
+
+    func confirmFileExists(atPath path: String) async throws -> FileExistence {
+        confirmFileExistsPaths.append(path)
+        return try await inner.fileExists(atPath: path)
+    }
+
+    func createDirectory(atPath path: String) async throws {
+        try await inner.createDirectory(atPath: path)
+    }
+
+    func contentsOfDirectory(atPath path: String) async throws -> [any CloudItem] {
+        try await inner.contentsOfDirectory(atPath: path)
+    }
+
+    func removeItem(atPath path: String) async throws {
+        try await inner.removeItem(atPath: path)
+    }
+
+    func uploadLocalFile(atPath localPath: String, toPath remotePath: String) async throws {
+        try await inner.uploadLocalFile(atPath: localPath, toPath: remotePath)
+    }
+
+    func downloadFile(atPath remotePath: String, toLocalFile localPath: String) async throws {
+        if refusesToOverwriteDownloads, FileManager.default.fileExists(atPath: localPath) {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteFileExistsError, userInfo: [
+                NSLocalizedDescriptionKey: "an item with the same name already exists",
+            ])
+        }
+        try await inner.downloadFile(atPath: remotePath, toLocalFile: localPath)
+    }
 }

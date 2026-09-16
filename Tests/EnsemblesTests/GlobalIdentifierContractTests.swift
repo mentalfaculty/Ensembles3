@@ -85,7 +85,7 @@ struct GlobalIdentifierContractTests {
         // Three change-dicts; the middle one lacks globalIdentifier.
         let eventDict: [String: Any] = [
             "uniqueIdentifier": "evt-1",
-            "type": 1,
+            "type": 200,
             "globalCount": 1,
             "timestamp": "0",
             "storeIdentifier": "store-1",
@@ -123,7 +123,7 @@ struct GlobalIdentifierContractTests {
 
         let eventDict: [String: Any] = [
             "uniqueIdentifier": "evt-2",
-            "type": 1,
+            "type": 200,
             "globalCount": 1,
             "timestamp": "0",
             "storeIdentifier": "store-1",

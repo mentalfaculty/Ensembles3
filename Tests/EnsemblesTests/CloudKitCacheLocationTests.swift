@@ -92,6 +92,10 @@ struct CloudKitCacheLocationTests {
     /// Keith's phone saw a partial cloud: a cache from a previous incarnation.
     @Test("A cache left in the pre-3.0.8 location is discarded, not adopted")
     func strayCacheIsDiscarded() throws {
+        // The stray location is the real user caches directory, shared by every test
+        // in the process, and Swift Testing runs tests in parallel. A per-test checksum
+        // keeps this test from racing `discardingStraysDoesNotTouchStoreCache`.
+        let zoneChecksum = "stray-" + UUID().uuidString
         let strayURLs = CloudKitListingCache.strayURLs(forZoneChecksum: zoneChecksum)
         #expect(strayURLs.count == 2)
         defer { strayURLs.forEach { try? FileManager.default.removeItem(at: $0) } }
@@ -138,6 +142,7 @@ struct CloudKitCacheLocationTests {
 
     @Test("Discarding a stray cache leaves the store's own cache untouched")
     func discardingStraysDoesNotTouchStoreCache() throws {
+        let zoneChecksum = "stray-" + UUID().uuidString
         let storeDir = try makeStoreDirectory()
         defer { try? FileManager.default.removeItem(at: storeDir) }
 

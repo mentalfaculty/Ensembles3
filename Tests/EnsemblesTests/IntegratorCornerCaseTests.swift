@@ -147,4 +147,65 @@ struct IntegratorCornerCaseTests {
         s.testMOC.performAndWait { s.testMOC.reset() }
         #expect(s.fetchParents().count == 1, "Full integration with no integrable events wiped the store")
     }
+
+    // MARK: - Deciding Whether Integration Is Needed
+
+    @Test("Remote events with changes are integrated, not skipped")
+    func remoteEventsWithChangesAreIntegrated() async throws {
+        // The decision to integrate must follow the events, not the local store's
+        // identifier. A remote event carrying object changes has to be merged even
+        // when the device also has local events of its own. This is the shape of a
+        // stuck follower: remote changes present and uncommitted, yet never applied.
+        let s = try IntegratorTestStack()
+        s.integrator.performIntegrabilityChecks = false
+
+        // A local event alongside the remote one, so the candidate set is mixed
+        // rather than purely remote.
+        let localEvent = try s.setup.addModEvent(store: s.setup.persistentStoreIdentifier, revision: 0, globalCount: 1, timestamp: 1)
+        let localGlobalId = try s.setup.addGlobalIdentifier("parent-local", entity: "Parent")
+        try s.setup.addObjectChange(type: .insert, globalIdentifier: localGlobalId, event: localEvent)
+
+        let remoteEvent = try s.setup.addModEvent(store: "remote-store", revision: 0, globalCount: 2, timestamp: 2)
+        let globalId = try s.setup.addGlobalIdentifier("parent-1", entity: "Parent")
+        try s.setup.addObjectChange(type: .insert, globalIdentifier: globalId, event: remoteEvent)
+
+        try await s.mergeEvents()
+
+        s.testMOC.performAndWait { s.testMOC.reset() }
+        #expect(s.fetchParents().count == 2, "The remote event's object change was not integrated alongside the local one")
+
+        // The remote object specifically must be in the store. Integration records
+        // the created object's URI against its global identifier, so a populated
+        // storeURI is direct evidence that this change was applied.
+        let remoteIdentifier = try s.eventStore.fetchGlobalIdentifiers(forIdentifierStrings: ["parent-1"], withEntityName: "Parent").compactMap { $0 }.first
+        #expect(remoteIdentifier?.storeURI != nil, "The remote object was not created in the persistent store")
+    }
+
+    @Test("Purely local events are not integrated")
+    func purelyLocalEventsAreNotIntegrated() async throws {
+        // The mirror of the test above. Events originating solely from this device
+        // have already been applied by the app itself, so there is nothing to merge
+        // and no merge event should be produced.
+        //
+        // A baseline is needed, and must be recorded as the one the store was built
+        // from. Without it the integrator treats the store as needing a full
+        // integration, which bypasses the local-only decision under test here.
+        let s = try IntegratorTestStack()
+        s.integrator.performIntegrabilityChecks = false
+
+        let baselines = try s.setup.addBaselineEvents(storeId: s.setup.persistentStoreIdentifier, globalCounts: [0], revisions: [0])
+        s.eventStore.identifierOfBaselineUsedToConstructStore = baselines[0].uniqueIdentifier
+
+        let localEvent = try s.setup.addModEvent(store: s.setup.persistentStoreIdentifier, revision: 1, globalCount: 1, timestamp: 1)
+        let globalId = try s.setup.addGlobalIdentifier("parent-local", entity: "Parent")
+        try s.setup.addObjectChange(type: .insert, globalIdentifier: globalId, event: localEvent)
+
+        let mergeEventsBefore = try s.eventStore.fetchEvents(types: [.merge], persistentStoreIdentifier: nil).count
+        try await s.mergeEvents()
+        let mergeEventsAfter = try s.eventStore.fetchEvents(types: [.merge], persistentStoreIdentifier: nil).count
+
+        #expect(mergeEventsAfter == mergeEventsBefore, "A merge event was created for purely local events")
+        s.testMOC.performAndWait { s.testMOC.reset() }
+        #expect(s.fetchParents().count == 0, "A local-only event was integrated back into the store")
+    }
 }

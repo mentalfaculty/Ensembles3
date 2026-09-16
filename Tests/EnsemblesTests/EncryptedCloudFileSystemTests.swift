@@ -26,6 +26,24 @@ struct EncryptedCloudFileSystemTests {
         return path
     }
 
+    // MARK: - Confirmed Existence Forwarding
+
+    @Test("The wrapper forwards the confirmed existence check to the wrapped backend")
+    func confirmedExistenceForwardsToWrappedBackend() async throws {
+        // The protocol default for confirmFileExists calls the wrapper's own
+        // fileExists, which delegates to the wrapped backend's ordinary (possibly
+        // cached) check. The wrapper must forward the confirmed variant explicitly,
+        // or the registration sentinel silently loses its cache bypass when a
+        // caching backend is wrapped.
+        let spy = ExistenceSpyFileSystem()
+        let info = try #require(VaultInfo(password: "test"))
+        let encrypted = EncryptedCloudFileSystem(cloudFileSystem: spy, vaultInfo: info)
+
+        _ = try await encrypted.confirmFileExists(atPath: "/MyEnsemble/stores/storeX")
+        #expect(!spy.confirmFileExistsPaths.isEmpty)
+        #expect(spy.fileExistsPaths.isEmpty)
+    }
+
     // MARK: - FileEncryptor
 
     @Test("Modern encrypt/decrypt round-trip")

@@ -336,7 +336,7 @@ See each backend's class documentation for detailed setup instructions and code 
 
 ## Custom Cloud Backends
 
-Any storage that can hold files at paths can serve as a backend. Implement the `CloudFileSystem` protocol — just 8 methods covering connection, file existence, directory listing, upload, download, and deletion. See the DocC documentation for a full guide and reference implementations.
+Any storage that can hold files at paths can serve as a backend. Implement the `CloudFileSystem` protocol — just 8 methods covering connection, file existence, directory listing, upload, download, and deletion (plus one optional server-confirmed existence check for backends that cache remote listings). See the DocC documentation for a full guide and reference implementations.
 
 ## Backward Compatibility
 
@@ -400,8 +400,10 @@ Free trials are available at [ensembles.io](https://ensembles.io).
 The package includes a runnable test suite that links against the shipped XCFrameworks:
 
 ```bash
-swift test
+swift test --build-system native
 ```
+
+The `--build-system native` flag is needed on Xcode 27 and later. The default build system reports duplicate outputs when a package's own library products wrap binary targets of the same name, which only affects building this repository directly. Packages that depend on it build normally.
 
 ## Documentation
 

@@ -213,6 +213,20 @@ struct RevisionManagerTests {
         #expect(result.events.count == 1)
     }
 
+    @Test("A missing data file is reported as a non-critical error code")
+    func missingDataFileReportsInformativeErrorCode() throws {
+        // The event is excluded (existing behavior), but the exclusion must also be
+        // visible without verbose logging: apps observing `nonCriticalErrorCodes`
+        // should learn that events are being held back for missing data files.
+        let event = try setup.addModEvent(store: storeId, revision: 1, timestamp: 1234)
+        let eventMissingFile = try setup.addModEvent(store: storeId, revision: 2, timestamp: 1234)
+        try setup.addMissingFile(to: eventMissingFile)
+
+        let result = try revisionManager.integrableEvents(from: [event, eventMissingFile])
+        #expect(result.events.count == 1)
+        #expect(result.informativeErrorCodes.contains(EnsembleError.missingDataFiles.rawValue))
+    }
+
     @Test("Integrable events with failing integrity for other store")
     func integrableEventsFailingIntegrity2() throws {
         try setup.addRevisionOfOtherStoreToBaseline("otherStore")
@@ -240,5 +254,49 @@ struct RevisionManagerTests {
 
         let result = try revisionManager.integrableEvents(from: [event, eventMissingFile])
         #expect(result.events.count == 0)
+    }
+
+    // MARK: - Permanently Absent Revisions
+
+    @Test("An event is held back when an earlier revision never arrived")
+    func eventAfterMissingRevisionIsHeldBack() throws {
+        // A device that stops participating before all its events reach the cloud
+        // leaves a permanent hole in its revision sequence. Here revision 2 was never
+        // deposited, while revisions 1 and 3 arrived. Revision 3 must be held back
+        // rather than applied over a history we cannot see.
+        //
+        // Note the gap is detected across the revision range spanned by the events
+        // under consideration, which is how a sync encounters it: the uncommitted set
+        // covers everything since the last merge, so it straddles the hole.
+        try setup.addRevisionOfOtherStoreToBaseline("otherStore")
+
+        let firstEvent = try setup.addModEvent(store: "otherStore", revision: 1, timestamp: 1234)
+        // revision 2 is absent and will never arrive
+        let eventAfterGap = try setup.addModEvent(store: "otherStore", revision: 3, timestamp: 1234)
+
+        let result = try revisionManager.integrableEvents(from: [firstEvent, eventAfterGap])
+        #expect(!result.events.contains(eventAfterGap), "An event following a permanently missing revision was treated as integrable")
+        #expect(result.events.contains(firstEvent), "The event preceding the gap should still be integrable")
+    }
+
+    @Test("Integrability of an event depends on the set it is judged with")
+    func integrabilityDependsOnTheSetSuppliedForJudgement() throws {
+        // The continuity check runs across the revision range spanned by the events
+        // it is given, so the same event can be judged differently depending on what
+        // accompanies it. This is why inspecting integrability outside the framework
+        // can disagree with what a sync actually does.
+        try setup.addRevisionOfOtherStoreToBaseline("otherStore")
+
+        let firstEvent = try setup.addModEvent(store: "otherStore", revision: 1, timestamp: 1234)
+        // revision 2 is absent and will never arrive
+        let eventAfterGap = try setup.addModEvent(store: "otherStore", revision: 3, timestamp: 1234)
+
+        // Judged alone, the earlier event spans no gap and is integrable.
+        let narrow = try revisionManager.integrableEvents(from: [firstEvent])
+        #expect(narrow.events.contains(firstEvent))
+
+        // Judged together, the range now covers the hole at revision 2.
+        let wide = try revisionManager.integrableEvents(from: [firstEvent, eventAfterGap])
+        #expect(!wide.events.contains(eventAfterGap))
     }
 }
