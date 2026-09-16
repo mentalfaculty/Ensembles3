@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.10
+
+- **Binary distribution: rebuilt with Xcode 26.6 so apps built with Xcode 16 and 26 link again.** The 3.0.9 XCFrameworks were built with Xcode 27.0, whose CloudKit SDK adds dedicated async entry points on `CKDatabase` (`_record(for:)`, `_recordZone(for:)`, `_save(CKSubscription)`). The compiler bound `EnsemblesCloudKit`'s calls to them, so an app linking the 3.0.9 binary with an earlier Xcode failed with six undefined CloudKit symbols. This release contains the same source as 3.0.9; only the toolchain the binaries were built with changes. The source distribution was not affected. Reported by Keith (Writing Shed Pro).
+
 ## 3.0.9
 
 - **Fix a sync that could stay paused forever after `suspendSync()`.** Suspension was implemented with a task created inside `suspendSync()`, and `resumeSync()` released only the continuation that task had registered by the time it was called. Two situations broke that: a second `suspendSync()` arriving while a sync was already paused (a second background task expiring, say) replaced the registration and orphaned the paused checkpoint, and a `resumeSync()` arriving before the task had run at all — a foreground transition right after the process was frozen — released nothing. In either case the in-flight sync waited on a signal that would never come, and because syncs are serialized, every later `sync()` queued behind it: the app appeared to stop syncing until relaunch. The suspender now keeps its state behind a lock, records every paused checkpoint, and releases all of them on the next `resumeSync()`; repeated calls in either direction are harmless. Reported by Pascal (issue #4).
