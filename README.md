@@ -218,7 +218,7 @@ If you use the [binary distribution](https://github.com/mentalfaculty/Ensembles3
 
 With the source distribution, enabling a package trait resolves the external dependency automatically via SPM — no extra steps needed.
 
-If a major SDK update introduces breaking API changes, pin to the line you have tested. This release was built against SwiftyDropbox 10.2.4, aws-sdk-swift 1.6.106, box-ios-sdk 10.8.0, and ZIPFoundation 0.9.20. If you would rather not manage these SDK versions yourself, use the [source distribution](https://ensembles.io) instead; there, Swift Package Manager resolves each SDK transitively, so there is nothing to pin.
+If a major SDK update introduces breaking API changes, pin to the line you have tested. This release was built against SwiftyDropbox 10.2.4, aws-sdk-swift 1.6.110, box-ios-sdk 10.9.0, and ZIPFoundation 0.9.20. If you would rather not manage these SDK versions yourself, use the [source distribution](https://ensembles.io) instead; there, Swift Package Manager resolves each SDK transitively, so there is nothing to pin.
 
 ## Develop with Claude Code
 
