@@ -2,7 +2,7 @@
 
 ## 3.0.10
 
-- **Binary distribution: rebuilt with Xcode 26.6 so apps built with Xcode 16 and 26 link again.** The 3.0.9 XCFrameworks were built with Xcode 27.0, whose CloudKit SDK adds dedicated async entry points on `CKDatabase` (`_record(for:)`, `_recordZone(for:)`, `_save(CKSubscription)`). The compiler bound `EnsemblesCloudKit`'s calls to them, so an app linking the 3.0.9 binary with an earlier Xcode failed with six undefined CloudKit symbols. This release contains the same source as 3.0.9; only the toolchain the binaries were built with changes. The source distribution was not affected. Reported by Keith (Writing Shed Pro).
+- **Binary distribution: rebuilt with Xcode 26.6 so apps built with Xcode 26 link again.** The 3.0.9 XCFrameworks were built with Xcode 27.0, whose CloudKit SDK adds dedicated async entry points on `CKDatabase` (`_record(for:)`, `_recordZone(for:)`, `_save(CKSubscription)`). The compiler bound `EnsemblesCloudKit`'s calls to them, so an app linking the 3.0.9 binary with an earlier Xcode failed with six undefined CloudKit symbols. This release contains the same source as 3.0.9; only the toolchain the binaries were built with changes. The source distribution was not affected. Reported by Keith (Writing Shed Pro).
 
 ## 3.0.9
 
