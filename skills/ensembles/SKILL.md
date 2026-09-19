@@ -96,7 +96,7 @@ Use `MemoryCloudFileSystem` as the backend in tests — it's an in-memory cloud,
 
 ## Troubleshooting
 
-- **Undefined symbols mentioning `CKDatabase` (`_record(for:)`, `_save`, `_recordZone(for:)`), or "unexpected ':' in type" errors from a `.swiftinterface` file, when building against the binary package:** you are on 3.0.2 or 3.0.3, whose binaries were built with a beta toolchain and cannot be consumed from stable Xcode. Update to 3.0.4 or later. The source package never had this problem.
+- **Undefined symbols mentioning `CKDatabase` (`_record(for:)`, `_save`, `_recordZone(for:)`), or "unexpected ':' in type" errors from a `.swiftinterface` file, when building against the binary package:** the binaries you have were built with a newer CloudKit SDK than the Xcode you are linking with. 3.0.2 and 3.0.3 were built with a beta toolchain; 3.0.9 was built with Xcode 27.0, whose SDK binds these calls to symbols no earlier SDK has, so it links only from Xcode 27. Update to 3.0.10 or later, which is built with the oldest Xcode Apple still accepts for App Store submission and links from every current Xcode. The source package never had this problem.
 - **CloudKit sync stalls for minutes right after app launch, and `Library/Caches/CloudKit` grows far larger than the store:** fixed in 3.0.2, and 3.0.3 makes the first sync after a relaunch fast as well (it restores a persisted listing of the zone and fetches only changes). Update to 3.0.3+.
 - **The `.cdecloudkitcache.v3` file in the app's Caches directory** is Ensembles' persisted listing of the CloudKit zone. It is safe to delete — the only effect is one full (metadata-only) refetch on the next sync. Do not delete the event store itself.
 

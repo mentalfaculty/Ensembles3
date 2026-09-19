@@ -409,6 +409,85 @@ struct EventStoreTests {
         restored.dismantle()
     }
 
+    /// The persisted token is decoded lazily, at the first identity check of a launch.
+    /// Anything that rewrites the store metadata before then (an app save registers a
+    /// mandatory event, for one) must carry the persisted token through untouched. If it
+    /// archives the not-yet-decoded in-memory value instead, it writes nil over the real
+    /// token, and the NEXT launch reads "no identity", compares it with the live one, and
+    /// force-detaches with cloudIdentityChanged although nothing changed.
+    @Test("A metadata save before the token is decoded does not wipe the persisted token")
+    func metadataSaveBeforeDecodeKeepsPersistedToken() throws {
+        let allowed: [AnyClass] = [NSString.self, NSNull.self]
+        let store = makeStore()!
+        let token: NSString = "user-record-id-123"
+        store.cloudFileSystemIdentityToken = token
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        // Launch 2: the app saves before any identity check has decoded the token.
+        let secondLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        secondLaunch.registerIncompleteMandatoryEventIdentifier("save-at-launch")
+        secondLaunch.deregisterIncompleteMandatoryEventIdentifier("save-at-launch")
+        secondLaunch.dismantle()
+
+        // Launch 3: the identity check decodes what is on disk.
+        let thirdLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        thirdLaunch.decodeCloudFileSystemIdentityToken(allowedClasses: allowed)
+        #expect(thirdLaunch.cloudFileSystemIdentityToken as? NSString == token)
+        thirdLaunch.dismantle()
+    }
+
+    /// The order a real launch takes when the app saves first: save, then the identity
+    /// check decodes. The token must survive in memory and on disk.
+    @Test("A metadata save followed by the decode in the same launch keeps the token")
+    func metadataSaveThenDecodeKeepsToken() throws {
+        let allowed: [AnyClass] = [NSString.self, NSNull.self]
+        let store = makeStore()!
+        let token: NSString = "user-record-id-123"
+        store.cloudFileSystemIdentityToken = token
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let secondLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        secondLaunch.registerIncompleteMandatoryEventIdentifier("save-at-launch")
+        secondLaunch.deregisterIncompleteMandatoryEventIdentifier("save-at-launch")
+        secondLaunch.decodeCloudFileSystemIdentityToken(allowedClasses: allowed)
+        #expect(secondLaunch.cloudFileSystemIdentityToken as? NSString == token)
+        // And a save after the decode, which archives the decoded token now that the
+        // undecoded bytes are gone.
+        secondLaunch.registerIncompleteMandatoryEventIdentifier("save-after-decode")
+        secondLaunch.deregisterIncompleteMandatoryEventIdentifier("save-after-decode")
+        secondLaunch.dismantle()
+
+        let thirdLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        thirdLaunch.decodeCloudFileSystemIdentityToken(allowedClasses: allowed)
+        #expect(thirdLaunch.cloudFileSystemIdentityToken as? NSString == token)
+        thirdLaunch.dismantle()
+    }
+
+    /// The other side of the rule above: a token assigned explicitly (a fresh attach
+    /// fetches the live identity) must win over bytes that were restored from disk and
+    /// never decoded.
+    @Test("An assigned token replaces an undecoded persisted one")
+    func assignedTokenReplacesUndecodedPersistedToken() throws {
+        let allowed: [AnyClass] = [NSString.self, NSNull.self]
+        let store = makeStore()!
+        store.cloudFileSystemIdentityToken = "old-account" as NSString
+        try store.prepareNewEventStore()
+        store.dismantle()
+
+        let secondLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        secondLaunch.cloudFileSystemIdentityToken = "new-account" as NSString
+        secondLaunch.registerIncompleteMandatoryEventIdentifier("any-save")
+        secondLaunch.deregisterIncompleteMandatoryEventIdentifier("any-save")
+        secondLaunch.dismantle()
+
+        let thirdLaunch = EventStore(ensembleIdentifier: "test", pathToEventDataRootDirectory: rootTestDirectory)!
+        thirdLaunch.decodeCloudFileSystemIdentityToken(allowedClasses: allowed)
+        #expect(thirdLaunch.cloudFileSystemIdentityToken as? NSString == "new-account")
+        thirdLaunch.dismantle()
+    }
+
     @Test("Identity token round-trips as nil when never set")
     func identityTokenRoundTripNil() throws {
         // prepareNewEventStore() is the path that writes metadata while the token is still nil

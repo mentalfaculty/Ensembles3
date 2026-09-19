@@ -431,4 +431,75 @@ struct BaselineConsolidatorTests {
         let strengthValue = values.first { $0.propertyName == "strength" }
         #expect(strengthValue?.value == StoredValue.int(5))
     }
+
+    // MARK: - Held-Back Baselines
+
+    /// A baseline held back for a missing data file, with the given revision set.
+    private func addHeldBackBaseline(storeId: String, globalCount: GlobalCount, revision: RevisionNumber) throws -> StoreModificationEvent {
+        let event = try setup.addEvents(type: .baselineMissingDependencies, storeId: storeId, globalCounts: [globalCount], revisions: [revision]).last!
+        try setup.addMissingFile(to: event)
+        return event
+    }
+
+    private func heldBackBaselines() throws -> [StoreModificationEvent] {
+        // Not `fetchStoreModEvents()`: that returns complete events only, and leaves held-back baselines out.
+        try setup.eventStore.fetchEvents(types: [.baselineMissingDependencies], persistentStoreIdentifier: nil)
+    }
+
+    /// The safety property. A follower's own baseline knows nothing of the other
+    /// store, so it does not cover that store's held-back baseline, however empty or
+    /// full either one is. Deleting it here would discard the only copy of the data.
+    @Test("A held-back baseline from a store the usable baseline has never seen is kept and reported")
+    func heldBackBaselineFromUnknownStoreIsKept() throws {
+        try setup.addEvents(type: .baseline, storeId: setup.persistentStoreIdentifier, globalCounts: [0], revisions: [0])
+        let heldBack = try addHeldBackBaseline(storeId: "123", globalCount: 0, revision: 7)
+
+        try consolidator.consolidateBaseline()
+
+        #expect(try heldBackBaselines().map(\.id) == [heldBack.id])
+        #expect(consolidator.heldBackBaselineErrorCodes == [EnsembleError.missingDataFiles.rawValue])
+    }
+
+    @Test("A held-back baseline that a usable baseline is strictly ahead of is deleted")
+    func heldBackBaselineBehindUsableBaselineIsDeleted() throws {
+        try setup.addEvents(type: .baseline, storeId: "123", globalCounts: [9], revisions: [6])
+        _ = try addHeldBackBaseline(storeId: "123", globalCount: 4, revision: 5)
+
+        try #require(try heldBackBaselines().count == 1)
+
+        try consolidator.consolidateBaseline()
+
+        #expect(try heldBackBaselines().isEmpty)
+        #expect(consolidator.heldBackBaselineErrorCodes.isEmpty)
+        #expect(try setup.fetchBaseline()?.globalCount == 9)
+    }
+
+    @Test("A held-back baseline with the same revisions as a usable baseline is deleted")
+    func heldBackBaselineEqualToUsableBaselineIsDeleted() throws {
+        try setup.addEvents(type: .baseline, storeId: "123", globalCounts: [9], revisions: [6])
+        _ = try addHeldBackBaseline(storeId: "123", globalCount: 9, revision: 6)
+
+        try #require(try heldBackBaselines().count == 1)
+
+        try consolidator.consolidateBaseline()
+
+        #expect(try heldBackBaselines().isEmpty)
+        #expect(consolidator.heldBackBaselineErrorCodes.isEmpty)
+        #expect(try setup.fetchBaseline() != nil)
+    }
+
+    /// Ahead on one store is not enough: the held-back baseline also carries a store
+    /// the usable one lacks, so the two are concurrent and nothing may be dropped.
+    @Test("A held-back baseline concurrent with the usable baseline is kept")
+    func concurrentHeldBackBaselineIsKept() throws {
+        let usable = try setup.addEvents(type: .baseline, storeId: "123", globalCounts: [9], revisions: [6]).last!
+        let heldBack = try addHeldBackBaseline(storeId: "123", globalCount: 4, revision: 5)
+        try setup.eventStore.insertRevision(persistentStoreIdentifier: "456", revisionNumber: 2, eventId: heldBack.id, isEventRevision: false)
+
+        try consolidator.consolidateBaseline()
+
+        #expect(try heldBackBaselines().map(\.id) == [heldBack.id])
+        #expect(try setup.fetchStoreModEvents().contains { $0.id == usable.id })
+        #expect(consolidator.heldBackBaselineErrorCodes == [EnsembleError.missingDataFiles.rawValue])
+    }
 }

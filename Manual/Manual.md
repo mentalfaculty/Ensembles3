@@ -983,6 +983,32 @@ let options: SyncOptions = [.forceRebase, .suppressCloudFileDeposition]
 try await ensemble?.sync(options: options)
 ```
 
+### Choosing When to Rebase
+
+A rebase folds the accumulated events into a new baseline. It keeps the event store and the cloud data small, but it is the most expensive thing a sync can do: the new baseline is uploaded in full, and every other device downloads it. Ensembles decides for itself when a rebase is worthwhile, and for most apps that is the right arrangement. Leave the options alone and it will happen when it should.
+
+Some apps would rather pick the moment. An app that records many small entries all day, and that gets generous background time while the device charges overnight, might prefer to keep daytime syncs quick and do the heavy work at night. You can do that with the two rebase options and `rebaseMetrics()`. If you take this on, take all of it on: Ensembles makes its own check only on the first sync of a launch that does not suppress it, so an app that suppresses rebasing all day should not count on the framework to catch up by itself.
+
+
+```swift
+// In normal use: never rebase.
+try await ensemble.sync(options: .suppressRebase)
+
+// When conditions suit an expensive sync (charging, a background processing task):
+let metrics = try await ensemble.rebaseMetrics()
+if metrics.isRebaseRecommended {
+    try await ensemble.sync(options: .forceRebase)
+} else {
+    try await ensemble.sync(options: .suppressRebase)
+}
+```
+
+`RebaseMetrics` gives you `eventCount`, `objectChangeCount`, `estimatedCompaction` (from 0 to 1, how much a rebase would shrink the event store) and `isRebaseRecommended`, which is the framework's own verdict. You can apply your own thresholds to the first three instead. One thing to know if you do: `estimatedCompaction` measures deletions and superseded updates. A store that only ever inserts scores close to zero however large it grows, so watch `eventCount` too.
+
+`rebaseMetrics()` takes its turn with attach, sync and detach, so it never reads the event store while a sync is changing it. If a sync is running, it returns when that sync has finished; if that sync is suspended, it waits until the sync has resumed and finished. It throws if the ensemble is not attached.
+
+When Ensembles acts on its own verdict it adds a random element in most cases, so that several devices reaching the threshold together do not all rebase at once. If you force a rebase whenever `isRebaseRecommended` is true, you give that up. With one device doing the overnight work that does not matter; with several, stagger them.
+
 ## Background Tasks and Suspend/Resume
 
 On iOS, the system may suspend your app at any time. If this happens during a sync, the work is lost and must be restarted. For apps with large stores or slow networks, this is a real problem.
