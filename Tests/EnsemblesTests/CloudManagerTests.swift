@@ -411,6 +411,12 @@ final class ExistenceSpyFileSystem: CloudFileSystem, @unchecked Sendable {
     var fileExistsPaths: [String] = []
     var confirmFileExistsPaths: [String] = []
 
+    /// Names the LISTING claims exist in a directory although the store does not hold
+    /// them, keyed by directory path: a listing that is wrong in the way a cached one
+    /// can be. `fileExists` repeats the lie, as a cache-backed answer would;
+    /// `confirmFileExists` tells the truth, as a server round trip does.
+    var phantomNamesByDirectory: [String: [String]] = [:]
+
     /// When true, `downloadFile` refuses to overwrite an existing destination the
     /// way CloudKit's asset copy does (NSCocoaErrorDomain 516), so tests can prove
     /// staging must be cleared before download rather than relying on overwrite.
@@ -428,6 +434,10 @@ final class ExistenceSpyFileSystem: CloudFileSystem, @unchecked Sendable {
 
     func fileExists(atPath path: String) async throws -> FileExistence {
         fileExistsPaths.append(path)
+        let directory = (path as NSString).deletingLastPathComponent
+        if phantomNamesByDirectory[directory]?.contains((path as NSString).lastPathComponent) == true {
+            return FileExistence(exists: true, isDirectory: false)
+        }
         return try await inner.fileExists(atPath: path)
     }
 
@@ -441,7 +451,11 @@ final class ExistenceSpyFileSystem: CloudFileSystem, @unchecked Sendable {
     }
 
     func contentsOfDirectory(atPath path: String) async throws -> [any CloudItem] {
-        try await inner.contentsOfDirectory(atPath: path)
+        var items = try await inner.contentsOfDirectory(atPath: path)
+        for name in phantomNamesByDirectory[path] ?? [] where !items.contains(where: { $0.name == name }) {
+            items.append(CloudFile(path: path + "/" + name, name: name, size: 1))
+        }
+        return items
     }
 
     func removeItem(atPath path: String) async throws {
