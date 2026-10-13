@@ -216,4 +216,71 @@ struct CloudKitResultPolicyTests {
         let harmless = partialFailure([id("a"): CKError(.serverRecordChanged)])
         #expect(!CloudKitListingCache.errorRequiresCacheDiscard(harmless))
     }
+
+    // MARK: Single-record existence (the registration check)
+
+    private func record(_ recordID: CKRecord.ID) -> CKRecord {
+        CKRecord(recordType: "CDEFileSystemNode", recordID: recordID)
+    }
+
+    @Test("A fetched record exists")
+    func existenceFetchedRecordExists() throws {
+        let a = id("store")
+        let found = try CloudKitResultPolicy.existenceOutcome(
+            requested: a, overall: .success(()), perRecord: [a: .success(record(a))])
+        #expect(found?.recordID == a)
+    }
+
+    @Test("unknownItem on any channel means absent")
+    func existenceUnknownItemMeansAbsent() throws {
+        let a = id("store")
+        #expect(try CloudKitResultPolicy.existenceOutcome(
+            requested: a, overall: .success(()), perRecord: [a: .failure(CKError(.unknownItem))]) == nil)
+        #expect(try CloudKitResultPolicy.existenceOutcome(
+            requested: a, overall: .failure(CKError(.unknownItem)), perRecord: [:]) == nil)
+        #expect(try CloudKitResultPolicy.existenceOutcome(
+            requested: a, overall: .failure(partialFailure([a: CKError(.unknownItem)])), perRecord: [:]) == nil)
+    }
+
+    /// A device must never be detached because the network was down. Any failure
+    /// other than "not found" is thrown, on either channel, so the sync fails instead.
+    @Test("Any other failure is thrown, never read as absent")
+    func existenceOtherFailureThrows() {
+        let a = id("store")
+        for code in [CKError.Code.networkFailure, .serviceUnavailable, .zoneNotFound, .notAuthenticated, .quotaExceeded] {
+            #expect(throws: (any Error).self) {
+                try CloudKitResultPolicy.existenceOutcome(
+                    requested: a, overall: .success(()), perRecord: [a: .failure(CKError(code))])
+            }
+            #expect(throws: (any Error).self) {
+                try CloudKitResultPolicy.existenceOutcome(
+                    requested: a, overall: .failure(CKError(code)), perRecord: [:])
+            }
+            #expect(throws: (any Error).self) {
+                try CloudKitResultPolicy.existenceOutcome(
+                    requested: a, overall: .failure(partialFailure([a: CKError(code)])), perRecord: [:])
+            }
+        }
+    }
+
+    /// The API promises one entry per requested ID. A response with none is not an
+    /// answer, and used to be read as "missing", which force-detaches the device.
+    @Test("A response that says nothing about the record is an unexpectedCloudResponse, not an absence")
+    func existenceMissingEntryIsUnexpectedResponse() {
+        let a = id("store"), other = id("other")
+        func expectUnexpectedResponse(overall: Result<Void, Error>, perRecord: [CKRecord.ID: Result<CKRecord, Error>]) {
+            let thrown = #expect(throws: NSError.self) {
+                try CloudKitResultPolicy.existenceOutcome(requested: a, overall: overall, perRecord: perRecord)
+            }
+            #expect(thrown?.domain == EnsembleError.errorDomain)
+            #expect(thrown?.code == EnsembleError.unexpectedCloudResponse.rawValue)
+        }
+        // Per-record channel: no entry, or an entry for another record only.
+        expectUnexpectedResponse(overall: .success(()), perRecord: [:])
+        expectUnexpectedResponse(overall: .success(()), perRecord: [other: .success(record(other))])
+        // Partial-failure channel: an empty dictionary, or "not found" about another
+        // record only. The old code read both as "this record is absent".
+        expectUnexpectedResponse(overall: .failure(partialFailure([:])), perRecord: [:])
+        expectUnexpectedResponse(overall: .failure(partialFailure([other: CKError(.unknownItem)])), perRecord: [:])
+    }
 }

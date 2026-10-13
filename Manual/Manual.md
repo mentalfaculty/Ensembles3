@@ -1103,7 +1103,7 @@ If that date is older than you'd expect given your auto-sync policy — say, hou
 
 Errors are reported as `EnsembleError` values in the `CDEErrorDomain` domain, and their descriptions name the case and code. A rough triage:
 
-- **Transient, self-healing** — network errors (1000–1002), `saveOccurredDuringMerge` (207), `saveOccurredDuringAttaching` (206), `cancelled` (101). Ignore them; the next sync trigger retries. Alert the user only if they persist for a long stretch.
+- **Transient, self-healing** — network errors (1000–1002), `unexpectedCloudResponse` (1004), `saveOccurredDuringMerge` (207), `saveOccurredDuringAttaching` (206), `cancelled` (101). Ignore them; the next sync trigger retries. Alert the user only if they persist for a long stretch.
 - **Informative, not failures** — `missingDataFiles` (210) appears in `nonCriticalErrorCodes` when events were held back because their data files have not yet arrived. The sync itself succeeded, and the files usually come down on a later sync. Investigate only if it persists across many syncs — that suggests the producing device stopped participating before uploading them.
 - **Configuration problems** — `missingGlobalIdentifierSource` (220), `unknownModelVersion` (204), `unlicensed` (3000). These do not clear on their own; fix the app.
 - **Forced detaches** — `cloudIdentityChanged` (202), `storeUnregistered` (205), `hardwareIdentityChanged` (213), `syncDataWasReset` (2000), `dataCorruptionDetected` (203). The ensemble has detached itself; see *Forced Detaches* in the previous chapter. Containers re-attach automatically on the next sync trigger.
@@ -2444,6 +2444,18 @@ ensemble?.compatibilityMode = .ensembles2Compatible
 ```
 
 Compatibility mode restricts E3 to features and formats that E2 can understand. Most notably, it disables compressed model hashes (which E2 can't decode).
+
+If your model has transformable attributes with an empty Transformer field, and they hold anything other than property-list values or the attribute's declared class (a class of your own that adopts only `NSCoding`, an `NSPredicate`, an attributed string), also set:
+
+```swift
+let config = EnsembleContainerConfiguration(
+    compatibilityMode: .ensembles2Compatible,
+    unnamedTransformableArchiving: .keyedArchiver
+)
+// or: ensemble?.unnamedTransformableArchiving = .keyedArchiver
+```
+
+Core Data saves those attributes with a keyed archive without secure coding, and so did Ensembles 2. This setting makes Ensembles 3 do the same, both when it records a change and when it merges one, including data written by E2 devices. Set it before the first attach, on every device. The archive bytes are the same either way, so data already in the cloud stays readable. Without it, such a value is logged as an error and does not sync, and other devices keep their own value.
 
 ### 3. Match Your Existing CloudKit Zone (CloudKit Users Only)
 

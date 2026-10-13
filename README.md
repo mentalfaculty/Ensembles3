@@ -367,6 +367,8 @@ ensemble.compatibilityMode = .ensembles2Compatible
 
 Once your E2 fleet is gone, switch to `.ensembles3` (the default) so future E3-only features become available. Today the two modes produce essentially identical exports; the only wire-level difference is behind an opt-in `compressModelHashes` flag. Switching modes early is safe between E3 peers. Once compressed-hash exports appear, remaining E2 devices cannot read them, which effectively forces those users to upgrade. Two E3 devices in different modes sync with each other normally; the mode only restricts what each device *writes*.
 
+If your model has transformable attributes with an empty Transformer field that hold anything other than property-list values or the attribute's declared class (for example classes adopting only `NSCoding`, or an `NSPredicate`), also set `unnamedTransformableArchiving: .keyedArchiver` (on the configuration or the ensemble) on every device before the first attach. It makes Ensembles 3 archive those attributes the way Core Data and Ensembles 2 do.
+
 If your existing E2 fleet uses CloudKit, your E3 build must use the same `CloudKitFileSystem` initializer your E2 build did — the two private-database initializers write to different CloudKit zones, and devices in different zones cannot see each other's records. The migration guide above has the details.
 
 ## Example Apps
