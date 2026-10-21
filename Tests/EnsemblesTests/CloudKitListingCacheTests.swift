@@ -171,4 +171,35 @@ struct CloudKitListingCacheTests {
         #expect(contents["/store/data"] == nil)
         #expect(contents["/store"]?.keys.contains("/store/data") == false)
     }
+
+    @Test("Zone deltas apply in arrival order to the file map and the directory contents")
+    func applyZoneDeltas() throws {
+        // The zone fetch collects what CloudKit reports and applies it afterwards,
+        // on the priming task, so CloudKit's callback thread never writes the cache.
+        // A change lands as noteChange would; a deletion as noteRemoval would.
+        var files = sampleFiles
+        var contents = CloudKitListingCache.rebuildContents(from: files, rootDirectory: "/")
+
+        let deltas: [CloudKitListingCache.ZoneDelta] = [
+            .changed(fullPath: "/store/data/file2.cdeevent", isDirectory: false, fileSize: 99),
+            .changed(fullPath: "/store/newdir", isDirectory: true, fileSize: 0),
+            .deleted(fullPath: "/store/data/file1.cdeevent"),
+            .deleted(fullPath: "/store/empty"),
+            .changed(fullPath: "/store/data/file2.cdeevent", isDirectory: false, fileSize: 100),
+        ]
+        CloudKitListingCache.applyZoneDeltas(deltas, rootDirectory: "/", files: &files, contents: &contents)
+
+        #expect(files == [
+            "/store/data": .init(isDirectory: true, fileSize: 0),
+            "/store/data/file2.cdeevent": .init(isDirectory: false, fileSize: 100),
+            "/store/newdir": .init(isDirectory: true, fileSize: 0),
+        ])
+        #expect(contents["/store/data"]?.keys.sorted() == ["/store/data/file2.cdeevent"])
+        let file = try #require(contents["/store/data"]?["/store/data/file2.cdeevent"] as? CloudFile)
+        #expect(file.size == 100)
+        #expect(contents["/store/newdir"]?.isEmpty == true)
+        #expect(contents["/store"]?["/store/newdir"] is CloudDirectory)
+        #expect(contents["/store"]?["/store/empty"] == nil)
+        #expect(contents["/store/empty"] == nil)
+    }
 }

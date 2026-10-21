@@ -764,7 +764,7 @@ When you're completely done with an ensemble (e.g., the user signed out and you 
 ensemble?.dismantle()
 ```
 
-This stops internal processing and releases the event store. After dismantling, the ensemble cannot be used again. This is called automatically by `SwiftDataEnsemble`'s `deinit` to prevent resource leaks.
+This stops internal processing and releases the event store. Operations still queued fail with `EnsembleError.cancelled`; an operation already running stops at its next phase boundary with the same error, and the event store closes once it has. With nothing running, the event store is closed before `dismantle()` returns. After dismantling, the ensemble cannot be used again. This is called automatically by `SwiftDataEnsemble`'s `deinit` to prevent resource leaks.
 
 \newpage
 
