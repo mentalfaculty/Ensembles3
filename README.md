@@ -154,6 +154,7 @@ When those defaults aren't right for your model, the delegate hands you the merg
 
 - **Delegate** — Implement `CoreDataEnsembleDelegate` to merge save notifications into your main context, handle forced detaches, provide global identifiers for deduplication, and repair data before merge saves.
 - **Suspend/Resume** — On iOS, call `suspendSync()` from a background task's expiration handler to pause an in-progress sync. Call `resumeSync()` when the app gets time again. The sync resumes from where it left off rather than restarting.
+- **Cancel** — Call `cancelSync()` to stop the in-progress sync at its next checkpoint, and any sync already queued behind it, for a Cancel button. Each pending `sync()` throws `EnsembleError.cancelled`, completed work is kept, and the ensemble stays attached.
 - **Detach** — `detachPersistentStore()` removes local sync data and unregisters from the cloud. The persistent store itself is not affected.
 
 ## Installation

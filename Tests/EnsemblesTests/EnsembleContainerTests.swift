@@ -111,6 +111,34 @@ struct EnsembleContainerTests {
         container.ensemble.dismantle()
     }
 
+    @Test("Container forwards cancelSync to its ensemble and it is harmless when idle")
+    func cancelSyncForwardsAndIsHarmlessWhenIdle() {
+        let fixture = TestFixture()
+        defer { fixture.cleanup() }
+
+        let config = EnsembleContainerConfiguration(
+            autoSyncPolicy: .manual,
+            localDataRootDirectoryURL: fixture.rootDir
+        )
+        guard let container = CoreDataEnsembleContainer(
+            name: "CancelTest",
+            storeURL: fixture.storeURL,
+            managedObjectModel: fixture.model,
+            managedObjectModels: [fixture.model],
+            cloudFileSystem: fixture.cloudFS,
+            configuration: config
+        ) else {
+            Issue.record("Failed to create container")
+            return
+        }
+
+        container.cancelSync()
+        #expect(!container.ensemble.isSyncing)
+        #expect(!container.isSyncSuspended, "cancel is not a suspend")
+
+        container.ensemble.dismantle()
+    }
+
     // MARK: - Init Tests
 
     @Test("Init from model URL")

@@ -810,6 +810,8 @@ Detaching:
 
 After detaching, the ensemble can be re-attached with `attachPersistentStore()` to resume syncing.
 
+Detaching is for repair, not for a *sync off* switch. To let the user pause syncing, stay attached and stop calling `sync()`: the ensemble keeps capturing saves, and when syncing resumes, the accumulated changes merge with the cloud attribute by attribute, like any other sync. With a container, create it with `autoSyncPolicy: .manual` and call `sync()` yourself while syncing is on; the policy is fixed when the container is created. A device that detaches instead throws away its sync history, and on re-attach its edits to objects the cloud also holds are overwritten by the cloud's values (see *Re-Attaching* below).
+
 ## Forced Detaches
 
 In exceptional circumstances, the ensemble may detach itself without being asked:
@@ -836,7 +838,7 @@ After a detach (forced or explicit), you can re-attach at any time:
 try await ensemble?.attachPersistentStore()
 ```
 
-The attach process runs again from scratch — the local data is re-imported, a new registration is created, and syncing resumes. Any data in the persistent store is preserved; only the sync metadata is rebuilt.
+The attach process runs again from scratch: a new registration is created, the local store is re-imported as a baseline, and syncing resumes. The re-import ranks below the cloud's own history. Objects the cloud does not have are added from the local store, but where both sides hold the same object, the cloud's values win. So an edit made while the device was detached, to an object the cloud also holds, is overwritten on re-attach, and an object deleted on another device in the meantime comes back. Objects created while detached survive. Keep the detached period short, and treat detach as a repair step rather than a way to turn sync off (see *Detaching*).
 
 \newpage
 
@@ -1036,6 +1038,18 @@ ensemble?.resumeSync()
 The sync resumes from where it left off rather than restarting from scratch. This is critical for large syncs — a 50 MB baseline upload that's 80% complete can finish in the next background session rather than starting over.
 
 You can check whether sync is currently suspended via `isSyncSuspended`.
+
+## Cancelling a Sync
+
+Suspending is for the system; cancelling is for the user. To back a Cancel button, call `cancelSync()`:
+
+```swift
+ensemble?.cancelSync()
+```
+
+The sync in progress stops at its next internal checkpoint, and its pending `sync()` call throws `EnsembleError.cancelled`. The containers' `sync()` returns `false` and passes that error to `didEncounterError`. Syncs already requested and still waiting their turn are cancelled too, including a container's automatic syncs, so a queued sync cannot undo the button; a sync requested after the call runs as normal. Work is kept in whole units: files already downloaded, batches already uploaded and phases already completed stay done, so the next sync carries on from there rather than starting over. A merge interrupted part way is discarded and redone by the next sync. The ensemble stays attached.
+
+`cancelSync()` returns at once; await the pending `sync()` calls to know when they have stopped. A sync paused with `suspendSync()` is cancelled straight away, with no `resumeSync()` needed, and the suspension itself stays in place until you resume. Calling `cancelSync()` with nothing running or requested has no effect. This replaces Ensembles 2's `cancelMergeWithCompletion:`.
 
 ## Monitoring Progress
 
@@ -2340,7 +2354,7 @@ In debug builds, `.trace` is a good choice. In production, the default `.error` 
 
 **Fix:** First diagnose: quiesce all writes, enable `.verbose` logging, and run one manual sync. If it succeeds, the app's save timing is the issue. If it still fails, the log will name the real error. To recover the device once the cause is addressed:
 
-1. **Detach and re-attach** (`container.detach()`, then `sync()`). Local data is preserved and re-imported; sync metadata is rebuilt from the cloud. This is the standard remedy and sufficient for almost every case.
+1. **Detach and re-attach** (`container.detach()`, then `sync()`). Sync metadata is rebuilt from the cloud, and the local store is re-imported and merged with it. The merge favours the cloud: objects the cloud lacks are added from the local store, but where both hold the same object, the cloud's values win. An edit made while the device was detached is therefore overwritten, and an object deleted elsewhere in the meantime comes back, so keep the detached window short. This is the standard remedy and sufficient for almost every case.
 2. **Rebuild from the cloud** — if the device's data is just a stale copy of what the cloud already has, detach, delete the local store files and the local event data directory, recreate the stack, and sync. The device comes back as a clone of the cloud. Any local changes that never synced are lost, so reserve this for devices with nothing unique to keep.
 
 Forcing a rebase is not a recovery tool — it compacts history; it does not repair a failing device.
@@ -2410,7 +2424,7 @@ Ensembles 3 is fully backward compatible with Ensembles 2 *cloud* data, so exist
 
 The local event store does not carry across. E3 uses a different on-disk database format (raw SQLite vs. E2's Core Data store), and there is no automatic conversion. On the first call to `attachPersistentStore()` after the swap, E3 deletes the existing event-data directory and registers as a fresh peer with the cloud. Your app's persistent store (your own Core Data or SwiftData SQLite) is untouched — only Ensembles' internal event-tracking database is reset.
 
-In practice this means the migrated device is treated like a new peer joining the ensemble: a fresh `persistentStoreIdentifier` is generated, the current baseline is pulled from the cloud, and the user's data ends up consistent with the rest of the ensemble. The user's data is not at risk: the attach imports the *entire local store* (with the default `mergeAllData` seed policy) and merges it with the cloud by global identifier, so local changes survive even if the E2 build never uploaded them. The one thing that cannot carry across is an unsynced *deletion* — an object deleted in E2 whose deletion event never reached the cloud no longer exists in the local store, so the re-import cannot know about it, and the object returns from the cloud after migration. If clean deletions matter for your migration window, have the E2 build sync to completion before the upgrade; otherwise migration order doesn't matter.
+In practice this means the migrated device is treated like a new peer joining the ensemble: a fresh `persistentStoreIdentifier` is generated, the current baseline is pulled from the cloud, and the user's data ends up consistent with the rest of the ensemble. The attach imports the *entire local store* (with the default `mergeAllData` seed policy) and merges it with the cloud by global identifier. Objects the cloud does not have are added from the local store, so a record the E2 build never uploaded is not lost. The import ranks below the cloud's own history, though: where the local store and the cloud both hold a value for the same attribute, the cloud's value wins, so an unsynced E2 *edit* to an existing object takes the cloud's value after migration. An unsynced *deletion* cannot carry across either — an object deleted in E2 whose deletion event never reached the cloud no longer exists in the local store, so the re-import cannot know about it, and the object returns from the cloud after migration. If unsynced edits or deletions matter for your migration window, have the E2 build sync to completion before the upgrade; otherwise migration order doesn't matter.
 
 The first attach after migration also produces a forced detach with `EnsembleError.cloudIdentityChanged` — see step 6 below.
 
@@ -2479,6 +2493,8 @@ To find out which zone your E2 fleet is on, look at the `CDECloudKitFileSystem` 
 | `leechPersistentStore(...)` | `attachPersistentStore()` |
 | `deleechPersistentStore(...)` | `detachPersistentStore()` |
 | `mergeWithCompletion:` | `sync()` / `sync(options:)` |
+| `cancelMergeWithCompletion:` | `cancelSync()` |
+| `suspendMerge` / `resumeMerge` | `suspendSync()` / `resumeSync()` |
 | `CDECloudFileSystem` | `CloudFileSystem` |
 | `CDEICloudFileSystem` | `ICloudDriveFileSystem` |
 | `CDECloudKitFileSystem` | `CloudKitFileSystem` |

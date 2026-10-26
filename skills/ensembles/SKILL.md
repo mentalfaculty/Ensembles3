@@ -45,6 +45,9 @@ Then depend on the products you need (`Ensembles`, `EnsemblesCloudKit`, …). Th
 | `attachPersistentStore(seedPolicy:)` | Register store, join the ensemble. Was E2 `leech`. |
 | `sync(options:)` | One sync pass: export local, import remote, integrate. Was E2 `merge`. |
 | `detachPersistentStore()` | Leave the ensemble. Was E2 `deleech`. |
+| `cancelSync()` (sync, not async) | Stop the running sync at its next checkpoint and every sync already requested (auto-syncs too); each `sync()` throws `cancelled` (101), completed work is kept, stays attached; a sync requested after the call runs. Was E2 `cancelMerge`. `suspendSync()`/`resumeSync()` pause instead. |
+
+To let the user turn sync off, stay attached and stop calling `sync()` (a container needs `autoSyncPolicy: .manual`, fixed at creation); do not detach. On re-attach the local store is re-imported as a junior baseline, so where the cloud also holds a value the cloud's wins: edits made while detached are overwritten, new objects survive.
 
 Operations are serialized internally (AsyncStream); concurrent calls queue safely. `CoreDataEnsembleDelegate` is for hooks (conflict/merge lifecycle, error handling, custom global identifiers), not for driving operations. For reliable cross-device propagation, two rounds are common: `sync()` to export, then `sync()` again after peers have exported, to import.
 

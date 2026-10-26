@@ -26,6 +26,16 @@ struct SyncSuspenderTests {
         stack = SyncTestStack()
     }
 
+    /// Spin until the ensemble reports a sync in progress, so a cancel that
+    /// follows is made against a started sync and not a queued request.
+    private func waitUntilSyncing(_ ensemble: CoreDataEnsemble) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !ensemble.isSyncing && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(ensemble.isSyncing, "sync did not start in time")
+    }
+
     @Test("Sync completes normally without suspend")
     func syncCompletesNormally() async throws {
         try await stack.attachStores()
@@ -252,6 +262,102 @@ struct SyncSuspenderTests {
         let parents = stack.fetchParents(in: stack.context2)
         #expect(parents.count == 2)
     }
+
+    @Test("cancelSync() stops a paused sync with cancelled and leaves the ensemble usable")
+    func cancelStopsPausedSync() async throws {
+        try await stack.attachStores()
+
+        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        parent.setValue("grace", forKey: "name")
+        stack.save(stack.context1)
+        try await stack.syncEnsemble(stack.ensemble1)
+
+        // Pause device 2 at its first checkpoint, then cancel from outside.
+        stack.ensemble2.suspendSync()
+        let finished = AtomicFlag(false)
+        let syncTask = Task {
+            defer { finished.value = true }
+            try await stack.syncEnsemble(stack.ensemble2)
+        }
+        try await waitUntilSyncing(stack.ensemble2)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!finished.value, "sync should be paused here")
+
+        stack.ensemble2.cancelSync()
+
+        // The paused sync is released and fails with cancelled, without a resume.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !finished.value && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(finished.value, "sync stayed paused after cancelSync()")
+        let result = await syncTask.result
+        #expect(throws: EnsembleError.cancelled) { try result.get() }
+
+        // Still attached, not syncing; the cancel does not clear the pause.
+        #expect(stack.ensemble2.isAttached)
+        #expect(!stack.ensemble2.isSyncing)
+        #expect(stack.ensemble2.isSyncSuspended)
+
+        // Once resumed, the next sync is not cancelled and delivers the data.
+        stack.ensemble2.resumeSync()
+        try await stack.syncEnsemble(stack.ensemble2)
+        let parents = stack.fetchParents(in: stack.context2)
+        #expect(parents.count == 1)
+        #expect(parents.first?.value(forKey: "name") as? String == "grace")
+    }
+
+    @Test("cancelSync() also cancels a sync already queued behind the running one")
+    func cancelCoversQueuedSync() async throws {
+        try await stack.attachStores()
+
+        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        parent.setValue("ivan", forKey: "name")
+        stack.save(stack.context1)
+        try await stack.syncEnsemble(stack.ensemble1)
+
+        // The first sync parks at a checkpoint; the second waits its turn on the queue,
+        // as a container's automatic sync would.
+        stack.ensemble2.suspendSync()
+        let first = Task { try await stack.syncEnsemble(stack.ensemble2) }
+        try await waitUntilSyncing(stack.ensemble2)
+        let second = Task { try await stack.syncEnsemble(stack.ensemble2) }
+        try await Task.sleep(for: .milliseconds(100))
+
+        stack.ensemble2.cancelSync()
+
+        let firstResult = await first.result
+        let secondResult = await second.result
+        #expect(throws: EnsembleError.cancelled) { try firstResult.get() }
+        #expect(throws: EnsembleError.cancelled) { try secondResult.get() }
+        #expect(stack.ensemble2.isAttached)
+        #expect(stack.fetchParents(in: stack.context2).isEmpty, "a cancelled queued sync must not have run")
+
+        // A sync requested after the cancel runs once resumed.
+        stack.ensemble2.resumeSync()
+        try await stack.syncEnsemble(stack.ensemble2)
+        let parents = stack.fetchParents(in: stack.context2)
+        #expect(parents.count == 1)
+        #expect(parents.first?.value(forKey: "name") as? String == "ivan")
+    }
+
+    @Test("cancelSync() with no sync running does not affect the next sync")
+    func cancelWithoutSyncIsHarmless() async throws {
+        try await stack.attachStores()
+
+        let parent = NSEntityDescription.insertNewObject(forEntityName: "Parent", into: stack.context1)
+        parent.setValue("heidi", forKey: "name")
+        stack.save(stack.context1)
+
+        stack.ensemble1.cancelSync()
+        stack.ensemble2.cancelSync()
+
+        try await stack.syncChanges()
+
+        let parents = stack.fetchParents(in: stack.context2)
+        #expect(parents.count == 1)
+        #expect(parents.first?.value(forKey: "name") as? String == "heidi")
+    }
 }
 }
 
@@ -318,6 +424,66 @@ struct SyncSuspenderUnitTests {
         suspender.resume()
         for task in tasks { try await task.value }
         #expect(suspender.waiterCount == 0)
+    }
+
+    @Test("cancel() makes the running sync's checkpoints throw until a later request begins")
+    func cancelThrowsUntilLaterRequestBegins() async throws {
+        let suspender = SyncSuspender()
+        let running = suspender.issueSyncTicket()
+        try suspender.beginSync(ticket: running)
+        #expect(!suspender.isCancelled)
+        try await suspender.checkpointIfSuspended()
+
+        suspender.cancel()
+        #expect(suspender.isCancelled)
+        await #expect(throws: EnsembleError.cancelled) { try await suspender.checkpointIfSuspended() }
+        // Still cancelled: every later checkpoint in the same sync throws too.
+        await #expect(throws: EnsembleError.cancelled) { try await suspender.checkpointIfSuspended() }
+
+        // A request made after the cancel begins cleanly and its checkpoints pass.
+        let later = suspender.issueSyncTicket()
+        try suspender.beginSync(ticket: later)
+        #expect(!suspender.isCancelled)
+        try await suspender.checkpointIfSuspended()
+    }
+
+    @Test("cancel() covers every request made before it and none made after")
+    func cancelCoversEarlierRequestsOnly() async throws {
+        let suspender = SyncSuspender()
+        let queuedBefore = suspender.issueSyncTicket()
+        suspender.cancel()
+        let requestedAfter = suspender.issueSyncTicket()
+
+        #expect(throws: EnsembleError.cancelled) { try suspender.beginSync(ticket: queuedBefore) }
+        // Refusing the earlier request leaves the cancel in place for other earlier ones.
+        #expect(throws: EnsembleError.cancelled) { try suspender.beginSync(ticket: queuedBefore) }
+        try suspender.beginSync(ticket: requestedAfter)
+        try await suspender.checkpointIfSuspended()
+
+        // A cancel with nothing requested since covers nothing new.
+        suspender.cancel()
+        let next = suspender.issueSyncTicket()
+        try suspender.beginSync(ticket: next)
+    }
+
+    @Test("cancel() releases a parked checkpoint with cancelled and keeps the suspension")
+    func cancelReleasesParkedCheckpoint() async throws {
+        let suspender = SyncSuspender()
+        try suspender.beginSync(ticket: suspender.issueSyncTicket())
+        suspender.suspend()
+        let task = Task { try await suspender.checkpointIfSuspended() }
+        try await waitForWaiters(1, on: suspender)
+        suspender.cancel()
+        await #expect(throws: EnsembleError.cancelled) { try await task.value }
+        #expect(suspender.waiterCount == 0)
+        #expect(suspender.isSuspended, "cancel is not a resume")
+
+        // The next request clears the cancel; still suspended, so it parks until resumed.
+        try suspender.beginSync(ticket: suspender.issueSyncTicket())
+        let next = Task { try await suspender.checkpointIfSuspended() }
+        try await waitForWaiters(1, on: suspender)
+        suspender.resume()
+        try await next.value
     }
 
     @Test("A cancelled task does not park at a checkpoint")
